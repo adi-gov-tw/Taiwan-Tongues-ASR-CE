@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASR 離線辨識測試頁面</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+    .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    h1 { color: #333; text-align: center; }
+    h2 { color: #666; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+    button:hover { background-color: #0056b3; }
+    .result { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+    .loading { text-align: center; color: #666; }
+    input[type="file"] { margin: 10px 0; }
+    textarea { width: 100%; height: 100px; margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>ASR 離線辨識測試頁面</h1>
+
+  <div class="container">
+    <h2>授權 / 登入</h2>
+    <div>
+      <label>帳號：</label>
+      <input id="loginUsername" placeholder="admin" />
+    </div>
+    <div>
+      <label>密碼：</label>
+      <input id="loginPassword" type="password" placeholder="admin@0935" />
+    </div>
+    <button onclick="loginAndStoreToken()">登入並保存 Token</button>
+    <button onclick="clearToken()">清除 Token</button>
+    <div style="margin-top:8px">
+      <label>或手動貼上 Token：</label>
+      <input id="manualToken" style="width:70%" placeholder="eyJ..." />
+      <button onclick="saveManualToken()">保存</button>
+    </div>
+    <div id="authStatus" class="result" style="display:none;"></div>
+  </div>
+
+  
+
+  <div class="container">
+    <h2>單一音檔轉錄</h2>
+    <input type="file" id="audioFile" accept=".wav,.mp3,.flac,.m4a,.aac">
+    <br>
+    <label for="referenceText">參考文本（可選）：</label>
+    <textarea id="referenceText" placeholder="輸入參考文本以計算 CER..."></textarea>
+    <br>
+    <button onclick="transcribeFile()">轉錄音檔</button>
+    <div id="transcribeResult" class="result" style="display: none;"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:5000/api';
+    const TOKEN_KEY = 'asr_token';
+    let STATUS_TIMER = null;
+    let CURRENT_TASK_ID = null;
+
+    function statusLabel(code) {
+      const map = {
+        0: '等待確認檔案',
+        3: '成功',
+        4: '失敗',
+        5: '已取消',
+        10: '音檔上傳中',
+        11: '等待處理逐字稿',
+        12: '檔案下載中',
+        13: '逐字稿處理中',
+        20: '音檔等待處理',
+        21: '音檔處理中',
+        22: '音檔處理完成',
+        30: '串流進行中',
+        31: '串流成功',
+        32: '串流失敗',
+        33: '串流無內容'
+      };
+      return map.hasOwnProperty(code) ? map[code] : `未知狀態(${code})`;
+    }
+
+    function updateStatusPanel(elementId, taskId, status, progress) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      let panel = element.querySelector('#statusPanel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'statusPanel';
+        panel.style.marginTop = '8px';
+        element.appendChild(panel);
+      }
+      const label = statusLabel(Number(status));
+      const pct = (typeof progress === 'number') ? `${progress}%` : '';
+      panel.textContent = `任務ID: ${taskId}｜狀態: ${label}｜進度: ${pct}`;
+    }
+
+    function getToken() {
+      return localStorage.getItem(TOKEN_KEY) || '';
+    }
+    function setToken(token) {
+      if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY);
+      updateAuthStatus();
+    }
+    function updateAuthStatus() {
+      const token = getToken();
+      const el = document.getElementById('authStatus');
+      if (!el) return;
+      el.style.display = 'block';
+      if (token) {
+        el.className = 'result';
+        el.textContent = '已保存 Token：' + token.slice(0, 12) + '...（長度 ' + token.length + '）';
+      } else {
+        el.className = 'result error';
+        el.textContent = '尚未保存 Token，受保護 API 將失敗（請先登入或貼上 Token）';
+      }
+    }
+
+    async function loginAndStoreToken() {
+      const username = document.getElementById('loginUsername').value || 'admin';
+      const password = document.getElementById('loginPassword').value || 'admin@0935';
+      showLoading('authStatus');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/login`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username, password, rememberMe: 1 })
+        });
+        const data = await resp.json();
+        if (resp.ok && data && data.token) {
+          setToken(data.token);
+          showResult('authStatus', { message: '登入成功，Token 已保存' }, false);
+        } else {
+          setToken('');
+          showResult('authStatus', data || { error: '登入失敗' }, true);
+        }
+      } catch (e) {
+        setToken('');
+        showResult('authStatus', { error: e.message }, true);
+      }
+    }
+
+    function saveManualToken() {
+      const t = document.getElementById('manualToken').value.trim();
+      if (!t) { alert('請貼上 Token'); return; }
+      setToken(t);
+      showResult('authStatus', { message: '已保存手動 Token' }, false);
+    }
+    function clearToken() {
+      setToken('');
+      showResult('authStatus', { message: '已清除 Token' }, false);
+    }
+
+    function showResult(elementId, data, isError = false) {
+      const element = document.getElementById(elementId);
+      element.style.display = 'block';
+      element.className = 'result' + (isError ? ' error' : '');
+      element.textContent = JSON.stringify(data, null, 2);
+    }
+    function showLoading(elementId) {
+      const element = document.getElementById(elementId);
+      element.style.display = 'block';
+      element.className = 'result loading';
+      element.textContent = '處理中...';
+    }
+
+    
+    async function transcribeFile() {
+      const btn = document.querySelector('button[onclick="transcribeFile()"]');
+      if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
+      const fileInput = document.getElementById('audioFile');
+      const referenceText = document.getElementById('referenceText').value;
+      if (!fileInput.files[0]) { alert('請選擇音檔'); return; }
+      const token = getToken();
+      if (!token) { alert('此 API 需要授權，請先登入或貼上 Token'); return; }
+      if (STATUS_TIMER) { clearInterval(STATUS_TIMER); STATUS_TIMER = null; }
+      CURRENT_TASK_ID = null;
+      showLoading('transcribeResult');
+      const formData = new FormData();
+      formData.append('audio', fileInput.files[0]);
+      if (referenceText) formData.append('reference_text', referenceText);
+      try {
+        const response = await fetch(`${API_BASE}/v1/subtitle/tasks`, {
+          method: 'POST',
+          body: formData,
+          headers: { 'authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        if (response.ok && data && typeof data.id !== 'undefined') {
+          CURRENT_TASK_ID = data.id;
+          showResult('transcribeResult', { message: '任務已建立', id: CURRENT_TASK_ID }, false);
+          updateStatusPanel('transcribeResult', CURRENT_TASK_ID, 20, 0);
+          startStatusPolling(CURRENT_TASK_ID, token);
+        } else {
+          showResult('transcribeResult', data || { error: '建立任務失敗' }, true);
+        }
+      } catch (error) {
+        showResult('transcribeResult', { error: error.message }, true);
+      }
+      finally {
+        if (btn) { btn.disabled = false; btn.textContent = '轉錄音檔'; }
+      }
+    }
+
+    function startStatusPolling(taskId, token) {
+      STATUS_TIMER = setInterval(async () => {
+        try {
+          const resp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}`, {
+            method: 'POST',
+            headers: { 'authorization': `Bearer ${token}` }
+          });
+          const data = await resp.json();
+          if (resp.ok && data && Array.isArray(data.data) && data.data.length > 0) {
+            const { status, progress } = data.data[0] || {};
+            showResult('transcribeResult', { id: taskId, status, progress }, false);
+            updateStatusPanel('transcribeResult', taskId, status, progress);
+            if (Number(status) === 22) {
+              clearInterval(STATUS_TIMER); STATUS_TIMER = null;
+              await showSubtitleLinks(taskId, token);
+            }
+          } else {
+            showResult('transcribeResult', data || { error: '查詢任務狀態失敗' }, true);
+          }
+        } catch (e) {
+          showResult('transcribeResult', { error: e.message }, true);
+        }
+      }, 2000);
+    }
+
+    async function showSubtitleLinks(taskId, token) {
+      try {
+        const txtResp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle-link?type=txt`, {
+          headers: { 'authorization': `Bearer ${token}` }
+        });
+        const srtResp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle-link?type=srt`, {
+          headers: { 'authorization': `Bearer ${token}` }
+        });
+        const txtData = await txtResp.json();
+        const srtData = await srtResp.json();
+        const links = [];
+        if (txtResp.ok && txtData && Array.isArray(txtData.data) && txtData.data.length > 0) {
+          links.push({ type: 'txt', url: txtData.data[0].url });
+        }
+        if (srtResp.ok && srtData && Array.isArray(srtData.data) && srtData.data.length > 0) {
+          links.push({ type: 'srt', url: srtData.data[0].url });
+        }
+        showResult('transcribeResult', { id: taskId, status: 22, progress: 100, links }, false);
+        updateStatusPanel('transcribeResult', taskId, 22, 100);
+        appendDownloadLinks('transcribeResult', links, taskId);
+      } catch (e) {
+        // 保持結果面板內容，僅追加錯誤訊息
+        console.error('取得字幕連結失敗:', e);
+      }
+    }
+
+    function appendDownloadLinks(elementId, links, taskId) {
+      if (!Array.isArray(links) || links.length === 0) return;
+      const element = document.getElementById(elementId);
+      const container = document.createElement('div');
+      container.style.marginTop = '8px';
+      links.forEach(l => {
+        const btn = document.createElement('button');
+        const t = String(l.type || '').toLowerCase();
+        btn.textContent = `下載 ${t.toUpperCase()}`;
+        btn.onclick = () => downloadSubtitle(taskId, t);
+        btn.style.marginRight = '10px';
+        container.appendChild(btn);
+      });
+      element.appendChild(container);
+    }
+
+    async function downloadSubtitle(taskId, type) {
+      const token = getToken();
+      if (!token) { alert('需要授權，請先登入'); return; }
+      const url = `${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle?type=${encodeURIComponent(type)}`;
+      try {
+        const resp = await fetch(url, { headers: { 'authorization': `Bearer ${token}` } });
+        if (!resp.ok) {
+          const text = await resp.text();
+          alert(`下載失敗 (${resp.status}): ${text}`);
+          return;
+        }
+        const blob = await resp.blob();
+        let filename = `${taskId}.${type}`;
+        const cd = resp.headers.get('content-disposition');
+        if (cd) {
+          const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+          const fn = (m && (m[1] || m[2])) ? decodeURIComponent(m[1] || m[2]) : null;
+          if (fn) filename = fn;
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      } catch (e) {
+        alert(`下載例外: ${e && e.message ? e.message : String(e)}`);
+      }
+    }
+
+    // 初始化顯示授權狀態
+    updateAuthStatus();
+  </script>
+</body>
+</html>
+
+

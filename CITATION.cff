@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+title: "Automatic Speech Recognition (ASR) Project"
+authors:
+  - family-names: "Hsieh"
+    given-names: "Archer"
+    affiliation: "Taiwan Mobile Co., Ltd"
+date-released: "2025-07-14"
+version: "1.0.0"
+abstract: |
+  This project provides a comprehensive framework for Automatic Speech Recognition (ASR), supporting multilingual speech processing and fine-tuning capabilities. It includes pre-trained models for Mandarin, Taiwanese, Hakka, and English, and tools for speech-to-text conversion and spoken language identification.
+
+keywords:
+  - ASR
+  - Automatic Speech Recognition
+  - Multilingual Speech Processing
+  - Speech-to-Text
+  - Open Source
+
+repository-code: "https://github.com/your-repo/asr-project"
+license: "MIT"

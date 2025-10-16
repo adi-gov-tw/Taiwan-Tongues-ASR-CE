@@ -1,0 +1,72 @@
+name: Security Checks
+
+on:
+  push:
+    branches: ["**"]   # Run on all branches
+  pull_request:
+    branches: ["**"]   # Run on all PRs
+  workflow_dispatch:    # Allow manual runs
+
+jobs:
+  gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks CLI
+        run: |
+          GITLEAKS_VERSION=8.28.0
+          curl -sSL -o gitleaks.tar.gz https://github.com/zricethezav/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+          rm gitleaks.tar.gz
+
+      - name: Run Gitleaks (full scan)
+        run: |
+          gitleaks detect --source . --redact --exit-code=2 --report-format=sarif --report-path=results.sarif
+
+      - name: Ensure SARIF exists
+        if: always()
+        run: |
+          if [ ! -f results.sarif ]; then
+            echo "{}" > results.sarif
+          fi
+
+      - name: Upload Gitleaks Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results.sarif
+          path: results.sarif
+
+  dependency-review:
+    name: Dependency Review (Vulnerability Scan)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Dependency Review(PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high   # fail build if high severity vuln detected
+          comment-summary-in-pr: true
+
+      - name: Dependency Review(Push)
+        if: github.event_name == 'push'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high   # fail build if high severity vuln detected
+          comment-summary-in-pr: true
+          base-ref: ${{ github.event.before }}
+          head-ref: ${{ github.sha }}
