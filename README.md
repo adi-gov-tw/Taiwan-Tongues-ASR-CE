@@ -103,9 +103,11 @@
 | 任務 | 方案 | 建議硬體規格 (含廠牌與數量) | 預估時間 |
 | :--- | :--- | :--- | :--- |
 | **推論**<br>(Inference) | **CPU** | **CPU：** 高階多核 CPU、核心/執行緒 16+、基礎時脈 3.0 GHz+<br>*(建議廠牌：Intel / AMD / MAC M1 以上)*<br>**RAM：** 32 GB 或更高 *(廠牌皆可)* | 以 5 分鐘音檔估算，約需 **7 分鐘** |
-| **推論**<br>(Inference) | **GPU** | **Host CPU：** 高階多核 CPU、核心/執行緒 8+、基礎時脈 2.0 GHz+<br>*(建議廠牌：Intel / AMD)*<br>**GPU：** VRAM 10 GB 以上<br>*(建議同 NVIDIA RTX 3080 / 4070 Ti 規格或更高)*<br>**限制：僅支援 NVIDIA**<br>**RAM：** 16 GB - 32 GB *(廠牌皆可)* | 以 5 分鐘音檔估算，約需 **30 秒** |
+| **推論**<br>(Inference) | **GPU** | **Host CPU：** 高階多核 CPU、核心/執行緒 8+、基礎時脈 2.0 GHz+<br>*(建議廠牌：Intel / AMD)*<br>**GPU：** VRAM 10 GB 以上<br>*(建議同 NVIDIA RTX 3080 / 4070 Ti 規格或更高)*<br>**RAM：** 16 GB - 32 GB *(廠牌皆可)* | 以 5 分鐘音檔估算，約需 **30 秒** |
 | **訓練/微調**<br>(Training) | **CPU** | **CPU：** 伺服器級多核心 CPU、核心/執行緒 32+、基礎時脈 2.5 GHz+<br>*(建議廠牌：Intel / AMD / MAC M1 以上)*<br>**RAM：** 128 GB 或更高 *(廠牌皆可)* | 建議僅用於資料預處理<br>訓練微調需數月以上，效率極低 |
-| **訓練/微調**<br>(Training) | **GPU** | **Host CPU：** 高階多核 CPU、核心/執行緒 8+、基礎時脈 2.0 GHz+<br>*(建議廠牌：Intel / AMD)*<br>**GPU：** VRAM 40 GB 以上<br>*(建議同 NVIDIA 6000PRO 規格或更高)*<br>**限制：僅支援 NVIDIA**<br>**RAM：** 128 GB 或更高 *(廠牌皆可)* | 以 200 小時音訊評估，約需 **72 小時** |
+| **訓練/微調**<br>(Training) | **GPU** | **Host CPU：** 高階多核 CPU、核心/執行緒 8+、基礎時脈 2.0 GHz+<br>*(建議廠牌：Intel / AMD)*<br>**GPU：** VRAM 40 GB 以上<br>*(建議同 NVIDIA 6000PRO 規格或更高)*<br>**RAM：** 128 GB 或更高 *(廠牌皆可)* | 以 200 小時音訊評估，約需 **72 小時** |
+
+- 以上皆為建議，實際會實際硬體廠牌規格視情況可以有所調整。
 
 ## 語料格式說明
 
