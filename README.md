@@ -1,6 +1,6 @@
 # Taiwan Tongues ASR CE專案
 
-本專案提供一套自動語音辨識（ASR, Automatic Speech Recognition）模型訓練流程，並附有已訓練好的國語、台語、客語、英語模型。你可以根據自己的語音資料進行微調（fine-tune），或直接使用現有模型進行語音辨識。
+本專案提供一套自動語音辨識（ASR, Automatic Speech Recognition）模型訓練流程，並附有已訓練好的臺灣華語、臺灣台語、臺灣客語、英語模型。你可以根據自己的語音資料進行微調（fine-tune），或直接使用現有模型進行語音辨識。
 
 ## 目錄結構
 
@@ -62,7 +62,7 @@
   - `clips/`：存放實際語音檔案，支援多層子目錄。
 
 - **models/**  
-  存放已訓練好的國語、台語、客語、英語模型，包含：
+  存放已訓練好的臺灣華語、臺灣台語、臺灣客語、英語模型，包含：
   - `model.bin`：模型權重檔案。
   - `config.json`、`preprocessor_config.json`、`tokenizer.json`、`vocabulary.json`：模型設定與詞彙表。
   - 注意：預設此資料夾不隨專案提供。請下載模型檔案，並將主要權重與設定檔放入專案根目錄的 `models/` 目錄。
@@ -151,7 +151,7 @@
 
 ## 已訓練模型
 
-- 已訓練好的國語、台語、客語、英語模型存放於 `models/` 目錄，包含：
+- 已訓練好的臺灣華語、臺灣台語、臺灣客語、英語模型存放於 `models/` 目錄，包含：
   - `model.bin`：模型權重
   - `config.json`、`preprocessor_config.json`、`tokenizer.json`、`vocabulary.json`：模型設定與詞彙表
 
