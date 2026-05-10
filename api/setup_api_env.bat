@@ -1,0 +1,84 @@
+@echo off
+echo === Setup ASR API venv (asr_api) ===
+echo.
+
+REM Run from project root regardless of where this script lives
+cd /d "%~dp0.."
+
+python --version >nul 2>&1
+if errorlevel 1 goto :no_python
+
+if exist "asr_api" goto :ask_recreate
+goto :create_venv
+
+:ask_recreate
+set choice=
+set /p choice=venv asr_api exists. Recreate? [Y/N]:
+if /i "%choice%"=="Y" goto :recreate
+echo Using existing venv, only updating dependencies...
+goto :install_deps
+
+:recreate
+echo Removing old venv...
+rmdir /s /q asr_api
+
+:create_venv
+echo Creating venv asr_api ...
+python -m venv asr_api
+
+:install_deps
+echo.
+echo Activating venv...
+call asr_api\Scripts\activate.bat
+
+echo.
+echo Upgrading pip...
+python -m pip install --upgrade pip
+
+echo.
+echo Detecting NVIDIA GPU...
+nvidia-smi >nul 2>&1
+if errorlevel 1 (
+    echo No NVIDIA GPU detected; installing CPU PyTorch.
+    set TORCH_INDEX=https://download.pytorch.org/whl/cpu
+    set TORCH_LABEL=CPU
+) else (
+    echo NVIDIA GPU detected; installing CUDA 12.4 PyTorch.
+    set TORCH_INDEX=https://download.pytorch.org/whl/cu124
+    set TORCH_LABEL=CUDA 12.4
+)
+
+echo.
+echo Installing PyTorch (%TORCH_LABEL%)...
+pip install torch --index-url %TORCH_INDEX%
+if errorlevel 1 goto :install_failed
+
+if not "%TORCH_LABEL%"=="CPU" (
+    echo.
+    echo Installing cuBLAS / cuDNN 9 ^(needed by ctranslate2 / faster-whisper for GPU^)...
+    pip install "nvidia-cublas-cu12" "nvidia-cudnn-cu12>=9,<10"
+    if errorlevel 1 goto :install_failed
+)
+
+echo.
+echo Installing api/requirements.txt ...
+pip install -r api\requirements.txt
+if errorlevel 1 goto :install_failed
+
+echo.
+echo === Setup complete ===
+echo To start the service: api\start_app.bat
+echo Before first run, copy api\.env.example to api\.env and fill secrets.
+echo.
+pause
+exit /b 0
+
+:no_python
+echo ERROR: Python not found. Please install Python 3.9+.
+pause
+exit /b 1
+
+:install_failed
+echo ERROR: dependency install failed.
+pause
+exit /b 1

@@ -9,6 +9,7 @@ import uuid
 import random
 import json
 import logging
+import re
 import time
 import urllib.parse
 import base64
@@ -30,6 +31,8 @@ sys.path.append(str(Path(__file__).parent / "stt_streaming" / "src"))
 from stt_streaming.src.asr.asr_factory import ASRFactory
 from stt_streaming.src.vad.vad_factory import VADFactory
 from stt_streaming.src.client import Client
+
+import jwt as _jwt
 
 # 設定日誌（固定寫入到 api/logs）
 BASE_DIR = Path(__file__).parent
@@ -176,15 +179,40 @@ def _send_error_and_close(websocket: WebSocket, error_message: str, job_record=N
         logging.error(f"發送錯誤訊息失敗: {e}")
 
 
+_USER_ID_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _safe_user_id(value: str, fallback: str = "user") -> str:
+    """轉成可安全用於檔名的 client_id（避免路徑/長度問題）。"""
+    if not value:
+        value = fallback
+    sanitized = _USER_ID_SAFE_RE.sub("_", str(value))
+    if len(sanitized) > 32:
+        sanitized = sanitized[:32]
+    return sanitized or fallback
+
+
 async def _validate_token(websocket: WebSocket, token: str) -> str:
-    """驗證 token 並返回 user_id"""
-    # 簡化的 token 驗證邏輯
+    """驗證 JWT token 並回傳適合作為檔名前綴的 user_id。"""
     if not token:
         _send_error_and_close(websocket, "token is required")
         return None
 
-    # 這裡可以添加更複雜的 token 驗證邏輯
-    user_id = token if token else "default_user"
+    try:
+        payload = _jwt.decode(
+            token,
+            os.getenv("ASR_API_JWT_SECRET", "CHANGE_ME_SECRET"),
+            algorithms=[os.getenv("ASR_API_JWT_ALGORITHM", "HS256")],
+        )
+    except _jwt.ExpiredSignatureError:
+        _send_error_and_close(websocket, "token expired")
+        return None
+    except _jwt.InvalidTokenError:
+        _send_error_and_close(websocket, "invalid token")
+        return None
+
+    subject = payload.get("sub") or payload.get("username") or payload.get("user_id")
+    user_id = _safe_user_id(subject, fallback="user")
     logging.info(f"Token 驗證成功，user_id: {user_id}")
     return user_id
 
@@ -241,7 +269,13 @@ async def handle_audio(client: Client, websocket: WebSocket):
                         cfg = message_data["data"]
                         config_update = {}
                         if "language" in cfg and cfg["language"]:
-                            config_update["language"] = cfg["language"]
+                            resolved_lang = _resolve_language(cfg["language"])
+                            config_update["language"] = resolved_lang
+                            # 同步更新 client.language 屬性，讓 faster_whisper_asr 真的讀到新語言
+                            try:
+                                setattr(client, "language", resolved_lang)
+                            except Exception:
+                                pass
                         if "processing_strategy" in cfg and cfg["processing_strategy"]:
                             config_update["processing_strategy"] = cfg[
                                 "processing_strategy"
@@ -328,10 +362,21 @@ async def handle_audio(client: Client, websocket: WebSocket):
                 break
 
 
+SUPPORTED_LANGUAGES = ("zh", "id")
+
+
+def _resolve_language(lang):
+    if not lang:
+        return "zh"
+    code = str(lang).strip().lower()
+    return code if code in SUPPORTED_LANGUAGES else "zh"
+
+
 @app.websocket("/ws/stt")
 async def streaming_stt_recognization(
     websocket: WebSocket,
     token: str = None,
+    language: str = "zh",
 ):
     """STT Streaming 識別端點"""
     streaming_record = None
@@ -370,7 +415,11 @@ async def streaming_stt_recognization(
         except Exception:
             pass
 
-        # 語言固定為 zh，不再從參數設定
+        # 設定本次連線的辨識語言（zh / id）
+        try:
+            setattr(client, "language", _resolve_language(language))
+        except Exception:
+            pass
 
         # 添加到連接列表
         connected_clients.append(client)

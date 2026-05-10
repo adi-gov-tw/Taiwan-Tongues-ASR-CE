@@ -1,54 +1,65 @@
 @echo off
-chcp 65001 >nul
 echo ========================================
-echo ASR API 整合服務啟動腳本 (port 5000)
+echo ASR API server (port 5000)
 echo ========================================
 
 REM ========================================
-REM 基本設定（可依需求調整）
+REM Sensitive settings live in api\.env (copy from api\.env.example).
+REM app.py auto-loads .env on startup; this script only sets non-secret defaults.
 REM ========================================
-REM JWT 秘鑰：發行與驗證 Token 用，請務必修改成安全值
-set ASR_API_JWT_SECRET=CHANGE_ME_SECRET
-REM JWT 演算法：預設 HS256
-set ASR_API_JWT_ALGORITHM=HS256
 
-REM 授權資料庫檔案路徑（放在 api 目錄下）
-set ASR_API_AUTH_DB=%~dp0auth.db
+REM Auth DB path (default: api\auth.db)
+if "%ASR_API_AUTH_DB%"=="" set ASR_API_AUTH_DB=%~dp0auth.db
 
-REM 預設管理員帳號（服務啟動時會檢查/建立）
-set ASR_API_BOOTSTRAP_ADMIN_USERNAME=admin
-REM 預設管理員暱稱
-set ASR_API_BOOTSTRAP_ADMIN_NICKNAME=ADMIN
-REM 預設管理員密碼（如啟用重設，將在啟動時套用）
-set ASR_API_BOOTSTRAP_ADMIN_PASSWORD=your_custom_password_here
+REM Streaming ASR runtime defaults
+if "%FASTAPI_SKIP_INIT%"=="" set FASTAPI_SKIP_INIT=0
+if "%FASTAPI_WARMUP%"=="" set FASTAPI_WARMUP=1
+if "%FASTAPI_ASR_MODEL_SIZE%"=="" set FASTAPI_ASR_MODEL_SIZE=models
+if "%FASTAPI_PORT%"=="" set FASTAPI_PORT=5000
+if "%BUFFERING_CHUNK_LENGTH_SECONDS%"=="" set BUFFERING_CHUNK_LENGTH_SECONDS=1.5
+if "%BUFFERING_CHUNK_OFFSET_SECONDS%"=="" set BUFFERING_CHUNK_OFFSET_SECONDS=0.1
 
-REM 啟動時是否強制重設 admin 密碼：1=是（預設）、0=否
-REM 設為 0 可避免覆蓋手動修改後的密碼
-set ASR_API_RESET_ADMIN_ON_STARTUP=1
-
-REM 串流 ASR 初始化與預熱設定（在同一埠下運作）
-set FASTAPI_SKIP_INIT=0
-set FASTAPI_WARMUP=1
-set FASTAPI_ASR_MODEL_SIZE=models
-REM 若需指定模型大小，請取消註解並填入實際的模型名稱
-REM set FASTAPI_ASR_MODEL_SIZE=your_model_size_here
-set FASTAPI_PORT=5000
-set BUFFERING_CHUNK_LENGTH_SECONDS=1.5
-set BUFFERING_CHUNK_OFFSET_SECONDS=0.1
-
-REM 檢查虛擬環境是否存在（在父目錄中）
-if not exist "..\asr_api\Scripts\activate.bat" (
-    echo ❌ 錯誤：找不到 asr_api 虛擬環境
-    pause
-    exit /b 1
+REM Warn if .env missing
+if not exist "%~dp0.env" (
+    echo WARN: api\.env not found. Falling back to insecure defaults
+    echo       ^(JWT_SECRET=CHANGE_ME_SECRET, etc^).
+    echo       Recommended: copy %~dp0.env.example %~dp0.env
+    echo                    then edit to set JWT secret and admin password.
+    echo.
 )
 
-echo ✅ 找到 asr_api 虛擬環境
-echo 正在啟動整合服務...
+REM ========================================
+REM Auto-detect virtual environment (priority order)
+REM ========================================
+set VENV_ACTIVATE=
+if exist "%~dp0..\asr_api\Scripts\activate.bat" (
+    set VENV_ACTIVATE=%~dp0..\asr_api\Scripts\activate.bat
+    echo Found venv: asr_api
+) else if exist "%~dp0..\train_env\Scripts\activate.bat" (
+    set VENV_ACTIVATE=%~dp0..\train_env\Scripts\activate.bat
+    echo Found venv: train_env
+) else if exist "%~dp0..\.venv\Scripts\activate.bat" (
+    set VENV_ACTIVATE=%~dp0..\.venv\Scripts\activate.bat
+    echo Found venv: .venv
+) else if exist "%~dp0..\venv\Scripts\activate.bat" (
+    set VENV_ACTIVATE=%~dp0..\venv\Scripts\activate.bat
+    echo Found venv: venv
+)
 
-REM 啟動虛擬環境並運行整合服務
-call ..\asr_api\Scripts\activate.bat && python app.py
+if "%VENV_ACTIVATE%"=="" (
+    echo WARN: No venv found, using system Python.
+    echo       Recommended: run %~dp0setup_api_env.bat first.
+    echo.
+    pushd "%~dp0"
+    python app.py
+    popd
+) else (
+    echo Starting service...
+    pushd "%~dp0"
+    call "%VENV_ACTIVATE%" && python app.py
+    popd
+)
 
 echo.
-echo 服務已停止
+echo Service stopped
 pause

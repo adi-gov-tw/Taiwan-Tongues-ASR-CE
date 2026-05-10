@@ -1,4 +1,4 @@
-whisper_env/
+train_env/
 __pycache__/
 *.pyc
 *.pyo
@@ -17,3 +17,17 @@ model_for_finetune/
 api/audio_files/
 .pre-commit-config.yaml
 *.DS_Store
+output/
+
+# 認證資料庫（含密碼 hash，啟動時自動重建）
+api/auth.db
+api/auth.db-journal
+api/auth.db-shm
+api/auth.db-wal
+
+# .env 機敏設定（請使用 .env.example 為範本另行建立 api/.env）
+.env
+api/.env
+*.env.local
+
+*.pid

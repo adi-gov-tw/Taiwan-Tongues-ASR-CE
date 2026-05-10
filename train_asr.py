@@ -42,7 +42,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
+try:
+    from transformers.utils import send_example_telemetry
+except ImportError:
+    def send_example_telemetry(*args, **kwargs):
+        pass
 from transformers.utils.versions import require_version
 
 sampling_rate = 16000
@@ -444,6 +449,10 @@ def main():
             return dataset[split]
 
     ds_cf_name_split = data_args.dataset_config_name.split("+")
+    auth_token_kwargs = (
+        {"token": True} if model_args.use_auth_token else {}
+    )
+
     if training_args.do_train:
         for ds_cf_name in ds_cf_name_split:
             print("ds_cf_name: ", ds_cf_name)
@@ -452,8 +461,8 @@ def main():
                 ds_cf_name,
                 data_dir=data_args.corpus_data_dir,
                 split=data_args.train_split_name,
-                use_auth_token=model_args.use_auth_token,
                 streaming=data_args.streaming,
+                **auth_token_kwargs,
             ).select_columns(["audio", "sentence"])
 
     if training_args.do_eval:
@@ -463,8 +472,8 @@ def main():
                 ds_cf_name,
                 data_dir=data_args.corpus_data_dir,
                 split=data_args.eval_split_name,
-                use_auth_token=model_args.use_auth_token,
                 streaming=data_args.streaming,
+                **auth_token_kwargs,
             ).select_columns(["audio", "sentence"])
 
     raw_datasets = raw_datasets.cast_column(
@@ -548,6 +557,11 @@ def main():
         raise ValueError(
             "Make sure that `config.decoder_start_token_id` is correctly defined"
         )
+
+    if training_args.gradient_checkpointing:
+        model.config.use_cache = False
+        if not training_args.gradient_checkpointing_kwargs:
+            training_args.gradient_checkpointing_kwargs = {"use_reentrant": False}
 
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()

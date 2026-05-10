@@ -9,8 +9,10 @@ python-multipart>=0.0.20
 # 機器學習和 AI
 torch>=2.1.0
 faster-whisper>=0.9.0
-numpy>=1.21.0
-transformers>=4.30.0
+numpy>=1.21.0,<2.0
+# transformers>=4.53 是 google/gemma-3-1b-it（標點符號後處理）所需的最低版本
+transformers>=4.53.0
+accelerate>=0.30.0
 
 # 音訊處理py
 librosa>=0.10.0
