@@ -1,12 +1,39 @@
 @echo off
-echo === Setup ASR API venv (asr_api) ===
+echo === Setup ASR API venv (asr_api) — Python 3.10+ ===
 echo.
 
 REM Run from project root regardless of where this script lives
 cd /d "%~dp0.."
 
+REM ========================================
+REM Locate Python 3.10+ (required)
+REM Priority: py -3.10  -^>  python  -^>  py -3 (must be ^>=3.10)  -^>  python (must be ^>=3.10)
+REM ========================================
+set PY_CMD=
+py -3.10 --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=py -3.10"
+    goto :py_found
+)
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=python"
+    goto :py_found
+)
+py -3 -c "import sys;exit(0 if sys.version_info[:2]>=(3,10) else 1)" >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=py -3"
+    goto :py_found
+)
 python --version >nul 2>&1
 if errorlevel 1 goto :no_python
+python -c "import sys;exit(0 if sys.version_info[:2]>=(3,10) else 1)" >nul 2>&1
+if errorlevel 1 goto :wrong_python
+set "PY_CMD=python"
+
+:py_found
+echo Using Python: %PY_CMD%
+%PY_CMD% --version
 
 if exist "asr_api" goto :ask_recreate
 goto :create_venv
@@ -23,13 +50,18 @@ echo Removing old venv...
 rmdir /s /q asr_api
 
 :create_venv
-echo Creating venv asr_api ...
-python -m venv asr_api
+echo Creating venv asr_api (Python 3.10+) ...
+%PY_CMD% -m venv asr_api
 
 :install_deps
 echo.
 echo Activating venv...
 call asr_api\Scripts\activate.bat
+
+echo.
+echo Verifying venv Python version...
+python -c "import sys; assert sys.version_info[:2]>=(3,10), 'venv python is %%s, need >=3.10' %% sys.version.split()[0]; print('venv python', sys.version.split()[0])"
+if errorlevel 1 goto :install_failed
 
 echo.
 echo Upgrading pip...
@@ -74,7 +106,15 @@ pause
 exit /b 0
 
 :no_python
-echo ERROR: Python not found. Please install Python 3.9+.
+echo ERROR: Python not found. Please install Python 3.10 or newer.
+echo        Recommended: run "py install 3.10" or download from
+echo        https://www.python.org/downloads/
+pause
+exit /b 1
+
+:wrong_python
+echo ERROR: Default python is too old; this project requires Python ^>=3.10.
+echo        Install Python 3.10+ (e.g. "py install 3.10") and re-run.
 pause
 exit /b 1
 

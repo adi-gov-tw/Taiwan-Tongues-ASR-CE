@@ -1,23 +1,33 @@
 #!/usr/bin/env bash
 # 建立訓練/推論用虛擬環境（train_env）並安裝 requirements.txt 內依賴。
 # 對應 Windows 版本：setup_train_env.bat
+# 本專案要求 Python 3.10 以上。
 set -e
 
 cd "$(dirname "$0")"
 
-echo "=== 建立訓練/推論虛擬環境 (train_env) ==="
+echo "=== 建立訓練/推論虛擬環境 (train_env) — 需要 Python 3.10+ ==="
 
-# 偵測 python 指令
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON=python3
-elif command -v python >/dev/null 2>&1; then
-    PYTHON=python
-else
-    echo "錯誤: 找不到 python，請先安裝 Python 3.9+"
+# 偵測 python 指令：優先 python3.10，再依序往上找符合 >=3.10 的直譯器
+PYTHON=""
+candidates="python3.10 python3.11 python3.12 python3.13 python3 python"
+for cand in $candidates; do
+    if command -v "$cand" >/dev/null 2>&1; then
+        if "$cand" -c 'import sys;exit(0 if sys.version_info[:2]>=(3,10) else 1)' >/dev/null 2>&1; then
+            PYTHON="$cand"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    echo "錯誤: 找不到 Python 3.10 以上版本，請先安裝後再試。"
+    echo "      Linux: 透過 apt / pyenv 等安裝 python3.10 (或更新版)"
+    echo "      macOS: brew install python@3.10 (或更新版)"
     exit 1
 fi
 
-PY_VERSION=$($PYTHON -c 'import sys;print("%d.%d"%sys.version_info[:2])')
+PY_VERSION=$("$PYTHON" -c 'import sys;print("%d.%d.%d"%sys.version_info[:3])')
 echo "使用 Python $PY_VERSION ($($PYTHON -c 'import sys;print(sys.executable)'))"
 
 # 處理已存在的 venv
@@ -41,6 +51,10 @@ fi
 
 # shellcheck disable=SC1091
 source train_env/bin/activate
+
+echo
+echo "確認 venv Python 版本..."
+python -c "import sys; assert sys.version_info[:2]>=(3,10), 'venv python is %s, need >=3.10' % sys.version.split()[0]; print('venv python', sys.version.split()[0])"
 
 echo
 echo "正在升級 pip..."
@@ -75,7 +89,8 @@ pip install -r requirements.txt
 echo
 echo "=== 驗證安裝 ==="
 python - <<'PY'
-import importlib
+import sys, importlib
+print(f"  OK  python         {sys.version.split()[0]}")
 mods = ["torch", "transformers", "librosa", "datasets", "evaluate", "accelerate", "soundfile"]
 for m in mods:
     try:

@@ -20,9 +20,7 @@
 │   ├── .env.example                  # 機敏設定範本（請複製為 .env）
 │   ├── build.py
 │   ├── static/                       # 測試頁（index/test_files/test_realtime.html）
-│   ├── logs/
 │   ├── audio_files/                  # 任務暫存目錄（執行後產生）
-│   ├── tests/
 │   └── stt_streaming/                # 即時串流模組（ASR / VAD / Buffering）
 ├── sample_corpus/
 │   ├── train_ds_01/
@@ -96,7 +94,11 @@
 
 1. **安裝依賴套件**
 
-   請先安裝 Python 3.9+。提供一鍵安裝腳本，自動建立 `train_env/` 並安裝 `requirements.txt`。腳本會以 `nvidia-smi` 偵測 NVIDIA GPU：偵測到時安裝 CUDA 12.4 版 PyTorch 與 cuDNN 9 / cuBLAS（faster-whisper 推論需要）；否則安裝 CPU 版。
+   請先安裝 **Python 3.10 以上版本**（本專案最低要求 3.10）。提供一鍵安裝腳本，自動建立 `train_env/` 並安裝 `requirements.txt`。腳本會優先採用 `py -3.10`（Windows）或 `python3.10`（Linux/macOS）；找不到時則回退到任一 `>=3.10` 的直譯器。會以 `nvidia-smi` 偵測 NVIDIA GPU：偵測到時安裝 CUDA 12.4 版 PyTorch 與 cuDNN 9 / cuBLAS（faster-whisper 推論需要）；否則安裝 CPU 版。
+
+   > Windows 取得 Python 3.10：執行 `py install 3.10` 或前往 [python.org 下載](https://www.python.org/downloads/release/python-31011/)。
+   > Linux：透過 `apt` / `pyenv` 安裝 `python3.10` 或更新版。
+   > macOS：`brew install python@3.10`（或更新版）。
 
    - Linux / macOS：
      ```bash
@@ -107,12 +109,17 @@
      setup_train_env.bat
      ```
 
-   或手動建立：
+   或手動建立（請以 Python 3.10 以上版本建立 venv）：
    ```bash
-   python -m venv train_env
-   source train_env/bin/activate          # Linux / macOS
-   # train_env\Scripts\activate.bat       # Windows (cmd)
-   # train_env\Scripts\Activate.ps1       # Windows (PowerShell)
+   # Linux / macOS
+   python -m venv train_env   # 或 python3.11 / python3.12 ...
+   source train_env/bin/activate
+   # Windows (cmd)
+   # py -3.10 -m venv train_env   # 或 py -3.11 / py -3.12 ...
+   # train_env\Scripts\activate.bat
+   # Windows (PowerShell)
+   # py -3.10 -m venv train_env
+   # train_env\Scripts\Activate.ps1
 
    pip install --upgrade pip
 

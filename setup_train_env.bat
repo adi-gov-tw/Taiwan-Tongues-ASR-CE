@@ -2,8 +2,35 @@
 echo === Setup training/inference venv (train_env) ===
 echo.
 
+REM ========================================
+REM Locate Python 3.10+ (required)
+REM Priority: py -3.10  -^>  python  -^>  py -3 (must be ^>=3.10)  -^>  python (must be ^>=3.10)
+REM ========================================
+set PY_CMD=
+py -3.10 --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=py -3.10"
+    goto :py_found
+)
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=python"
+    goto :py_found
+)
+py -3 -c "import sys;exit(0 if sys.version_info[:2]>=(3,10) else 1)" >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=py -3"
+    goto :py_found
+)
 python --version >nul 2>&1
 if errorlevel 1 goto :no_python
+python -c "import sys;exit(0 if sys.version_info[:2]>=(3,10) else 1)" >nul 2>&1
+if errorlevel 1 goto :wrong_python
+set "PY_CMD=python"
+
+:py_found
+echo Using Python: %PY_CMD%
+%PY_CMD% --version
 
 if exist "train_env" goto :ask_recreate
 goto :create_venv
@@ -20,13 +47,18 @@ echo Removing old venv...
 rmdir /s /q train_env
 
 :create_venv
-echo Creating venv train_env ...
-python -m venv train_env
+echo Creating venv train_env (Python 3.10+) ...
+%PY_CMD% -m venv train_env
 
 :activate_env
 echo.
 echo Activating venv...
 call train_env\Scripts\activate.bat
+
+echo.
+echo Verifying venv Python version...
+python -c "import sys; assert sys.version_info[:2]>=(3,10), 'venv python is %%s, need >=3.10' %% sys.version.split()[0]; print('venv python', sys.version.split()[0])"
+if errorlevel 1 goto :install_failed
 
 echo.
 echo Upgrading pip...
@@ -65,6 +97,7 @@ if errorlevel 1 goto :install_failed
 :verify
 echo.
 echo === Verifying install ===
+python -c "import sys; print('python', sys.version.split()[0])"
 python -c "import torch; print('torch', torch.__version__, '| cuda:', torch.cuda.is_available())"
 python -c "import transformers; print('transformers', transformers.__version__)"
 python -c "import librosa; print('librosa', librosa.__version__)"
@@ -78,7 +111,15 @@ pause
 exit /b 0
 
 :no_python
-echo ERROR: Python not found. Please install Python 3.9+.
+echo ERROR: Python not found. Please install Python 3.10 or newer.
+echo        Recommended: run "py install 3.10" or download from
+echo        https://www.python.org/downloads/
+pause
+exit /b 1
+
+:wrong_python
+echo ERROR: Default python is too old; this project requires Python ^>=3.10.
+echo        Install Python 3.10+ (e.g. "py install 3.10") and re-run.
 pause
 exit /b 1
 

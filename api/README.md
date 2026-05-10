@@ -14,7 +14,7 @@
 - [認證 API（HTTP, 5000）規格](#認證-apihttp-5000規格)
 - [Streaming ASR（WebSocket）API 規格](#streaming-asrwebsocketapi-規格)
 - [音訊規格建議](#音訊規格建議)
-- [測試](#測試)
+- [手動驗證](#手動驗證)
 - [引用](#引用)
 
 ---
@@ -36,6 +36,9 @@
   - WS `/ws/v1/transcript`（Query: `token`；合併模式直掛於 5000 埠）
 - `auth_api.py` / `auth_shared.py`：JWT 認證模組（admin/user 角色管理、SQLite 儲存）。
 - `stt_streaming/`：即時串流的模組與策略實作（ASR、VAD、Buffering 等）。
+- `punctuation.py`：File ASR 完成後對逐字稿加標點符號的後處理模組
+  （以 [zhpr](https://pypi.org/project/zhpr/) + `p208p2002/zh-wiki-punctuation-restore`
+  約 100MB，CPU/GPU 皆能跑；任何例外回退原文）。
 
 ---
 
@@ -43,7 +46,11 @@
 
 ### 一鍵安裝（建議）
 
-於專案根目錄執行對應腳本，會自動建立 `asr_api/` 虛擬環境並完成 `api/requirements.txt` 安裝。腳本會以 `nvidia-smi` 偵測 NVIDIA GPU：偵測到時安裝 CUDA 12.4 版 PyTorch，否則安裝 CPU 版。
+> **環境需求**：本專案最低要求 **Python 3.10**（3.10 以上皆可）。Windows 可透過 `py install 3.10` 安裝；Linux/macOS 請使用 `python3.10` 或更新版（`apt` / `pyenv` / `brew install python@3.10`）。
+
+於專案根目錄執行對應腳本，會自動以符合需求的 Python 建立 `asr_api/` 虛擬環境並完成 `api/requirements.txt` 安裝。腳本會優先選用 `py -3.10`（Windows）或 `python3.10`（Linux/macOS），找不到時回退到任一 `>=3.10` 的直譯器；接著以 `nvidia-smi` 偵測 NVIDIA GPU：偵測到時安裝 CUDA 12.4 版 PyTorch 與 cuBLAS / cuDNN 9，否則安裝 CPU 版。
+
+> 主要套件版本：Python 3.10+、PyTorch 2.x、transformers 4.x（受 zhpr 限制 `<5`，僅 API 端）、faster-whisper、zhpr、pytorch-lightning。詳見 `api/requirements.txt`。
 
 - Linux / macOS：
   ```bash
@@ -57,11 +64,19 @@
 ### 手動安裝（跨平台）
 
 ```bash
-# 在專案根目錄執行
-python -m venv asr_api
-source asr_api/bin/activate          # Linux / macOS
-# asr_api\Scripts\activate.bat       # Windows (cmd)
-# asr_api\Scripts\Activate.ps1       # Windows (PowerShell)
+# 在專案根目錄執行（請以 Python 3.10 以上版本建立 venv）
+
+# Linux / macOS
+python -m venv asr_api          # 或 python3.11 / python3.12 ...
+source asr_api/bin/activate
+
+# Windows (cmd)
+# py -3.10 -m venv asr_api          # 或 py -3.11 / py -3.12 ...
+# asr_api\Scripts\activate.bat
+
+# Windows (PowerShell)
+# py -3.10 -m venv asr_api
+# asr_api\Scripts\Activate.ps1
 
 pip install --upgrade pip
 
@@ -184,6 +199,22 @@ cp api/.env.example api/.env
 
 - GET `/test_files.html`：測試頁（健康檢查 / 單一音檔轉錄）
 
+### 標點符號後處理
+
+當任務轉錄完成後（status 進入 22 → 3），服務會將每個 Whisper segment 逐句送入
+[zhpr](https://pypi.org/project/zhpr/)（以 `p208p2002/zh-wiki-punctuation-restore`
+為底）加上 6 種中文標點：`，、。？！；`，再寫入 TXT / SRT 檔。
+- 模型於首個任務觸發時延遲載入；本體約 100MB，CPU 也能順跑（GPU 更快）。
+- 載入或推論失敗會自動回退原文，不會讓任務 fail。
+- 相關環境變數：`ASR_API_ENABLE_PUNCTUATION`（0=停用，預設 1）、
+  `ASR_API_PUNCTUATION_MODEL`、`ASR_API_PUNCTUATION_WINDOW_SIZE`、
+  `ASR_API_PUNCTUATION_STRIDE_STEP`、`ASR_API_PUNCTUATION_BATCH_SIZE`。
+  詳見 `api/.env.example`。
+
+> 注意：zhpr 0.1.3 在套件 metadata 把 `transformers` 釘在 `<5`，故
+> `api/requirements.txt` 把 transformers 跟著降到 `>=4.24,<5`；訓練端
+> （root `requirements.txt`）獨立 venv 仍保持 `transformers>=5,<6`。
+
 ---
 
 ## 認證 API（HTTP, 5000）規格
@@ -253,13 +284,30 @@ cp api/.env.example api/.env
 
 ### 環境變數
 
-- `ASR_API_AUTH_DB`：認證資料庫路徑
+完整清單與說明請見 `api/.env.example`。常用：
+
+**認證 / 安全**
+- `ASR_API_AUTH_DB`：認證資料庫路徑（預設 `api/auth.db`）
 - `ASR_API_JWT_SECRET`：JWT 密鑰
 - `ASR_API_JWT_ALGORITHM`：JWT 演算法（預設：HS256）
-- `ASR_API_BOOTSTRAP_ADMIN_USERNAME`：預設管理員使用者名稱
-- `ASR_API_BOOTSTRAP_ADMIN_PASSWORD`：預設管理員密碼
-- `ASR_API_BOOTSTRAP_ADMIN_NICKNAME`：預設管理員暱稱
+- `ASR_API_BOOTSTRAP_ADMIN_USERNAME` / `ASR_API_BOOTSTRAP_ADMIN_PASSWORD` / `ASR_API_BOOTSTRAP_ADMIN_NICKNAME`：預設管理員帳號
 - `ASR_API_RESET_ADMIN_ON_STARTUP`：啟動時是否重設管理員密碼
+
+**FastAPI / Streaming 執行設定**
+- `FASTAPI_HOST` / `FASTAPI_PORT`：監聽位址 / 埠（預設 `0.0.0.0` / `5000`）
+- `FASTAPI_SKIP_INIT`：1 = 略過 VAD/ASR 初始化（測試 WS 連線用）
+- `FASTAPI_WARMUP`：1 = 啟用模型預熱（降低首次推論延遲）
+- `FASTAPI_ASR_MODEL_SIZE`：faster-whisper 模型大小或本地資料夾（預設 `models`）
+- `BUFFERING_CHUNK_LENGTH_SECONDS` / `BUFFERING_CHUNK_OFFSET_SECONDS`：串流緩衝參數
+
+**HuggingFace**
+- `HF_TOKEN`：HuggingFace Token（從 HF 下載資源時可選用，未設定亦可運作）
+
+**標點符號後處理**
+- `ASR_API_ENABLE_PUNCTUATION`：1 = 啟用（預設）；0 = 停用
+- `ASR_API_PUNCTUATION_MODEL`：模型 ID（預設 `p208p2002/zh-wiki-punctuation-restore`）
+- `ASR_API_PUNCTUATION_WINDOW_SIZE` / `ASR_API_PUNCTUATION_STRIDE_STEP`：zhpr 滑窗推論的視窗大小與步長
+- `ASR_API_PUNCTUATION_BATCH_SIZE`：一次 forward 處理多少視窗（預設 8）
 
 ---
 
@@ -274,9 +322,9 @@ cp api/.env.example api/.env
   {"status":"healthy","connected_clients":0,"vad_pipeline":"ready","asr_pipeline":"ready","asr_device":"cuda","asr_compute_type":"float16","asr_model_size":"models"}
   ```
 
-- GET `/test_realtime.html`：即時辨識測試頁
+- GET `/test_realtime.html`：即時辨識測試頁（可直接於瀏覽器使用麥克風測試）
 
-- GET `/test`：簡易測試頁
+- GET `/stream/test`：服務端內建的最簡 HTML 測試頁（streaming app 子掛載於 `/stream`）
 
 - WebSocket `/ws/v1/transcript`：即時串流端點
   - Query 參數：`token`（必填，簡單驗證用）
@@ -334,17 +382,38 @@ cp api/.env.example api/.env
 
 ---
 
-## 測試
+## 手動驗證
 
-`pytest`、`httpx` 已含在 `api/requirements.txt`。測試使用模擬 Whisper 模型與獨立 SQLite，跑完自動清理。
+服務啟動後，可用以下流程逐項驗證主要功能（皆可用 `curl`、Postman 或測試頁完成）：
 
 ```bash
-pytest api/tests/                  # 全部
-pytest api/tests/test_file_asr.py  # 指定檔
-pytest -v api/tests/               # verbose
+# 1) 健康檢查
+curl http://127.0.0.1:5000/api/health
+curl http://127.0.0.1:5000/api/v1/health
+curl http://127.0.0.1:5000/stream/health
+
+# 2) 登入取得 JWT
+curl -X POST http://127.0.0.1:5000/api/v1/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin@0935","rememberMe":0}'
+
+# 3) 建立檔案辨識任務（將 <TOKEN> 換成上一步取得之 token）
+curl -H "Authorization: Bearer <TOKEN>" \
+  -F "audio=@api/stt_streaming/warm_up.wav" \
+  http://127.0.0.1:5000/api/v1/subtitle/tasks
+# 輪詢任務狀態（直到 status=3 表示成功）
+curl -X POST -H "Authorization: Bearer <TOKEN>" \
+  http://127.0.0.1:5000/api/v1/subtitle/tasks/<ID>
+# 下載字幕
+curl -H "Authorization: Bearer <TOKEN>" \
+  "http://127.0.0.1:5000/api/v1/subtitle/tasks/<ID>/subtitle?type=SRT" -o out.srt
+
+# 4) 即時辨識測試頁（瀏覽器開啟，按麥克風即可）
+#    http://127.0.0.1:5000/test_realtime.html
 ```
 
-涵蓋：健康檢查、登入/登出、權限拒絕、副檔名驗證、建立任務 → 輪詢 → 下載 TXT/SRT、測試頁可存取。
+> 目前專案尚未附上自動化測試套件；`api/requirements.txt` 中保留 `pytest` / `httpx`
+> 以便日後加入。
 
 ---
 

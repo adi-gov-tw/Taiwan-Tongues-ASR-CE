@@ -89,9 +89,9 @@ def check_python_and_pip():
     """檢查Python版本和pip可用性"""
     logger.info("檢查Python環境...")
 
-    # 檢查Python版本
-    if sys.version_info < (3, 8):
-        logger.error("❌ 需要Python 3.8或更高版本")
+    # 檢查Python版本（本專案要求 Python 3.10 以上）
+    if sys.version_info[:2] < (3, 10):
+        logger.error("❌ 需要 Python 3.10 或更高版本")
         logger.error(f"當前版本: {sys.version}")
         return False
 

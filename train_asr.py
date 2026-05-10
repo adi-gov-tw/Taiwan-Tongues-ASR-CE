@@ -376,11 +376,14 @@ def main():
     logger.info("Training/evaluation parameters %s", training_args)
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
+    # transformers 5.x 移除了 TrainingArguments.overwrite_output_dir，因此用 getattr 取舊 flag；
+    # 沒有時預設為 True（允許覆寫，不再因為輸出目錄非空而中斷）。
     last_checkpoint = None
+    overwrite_output_dir = getattr(training_args, "overwrite_output_dir", True)
     if (
         os.path.isdir(training_args.output_dir)
         and training_args.do_train
-        and not training_args.overwrite_output_dir
+        and not overwrite_output_dir
     ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
@@ -510,7 +513,7 @@ def main():
         ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     config.update(
@@ -532,7 +535,7 @@ def main():
         ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         (
@@ -543,14 +546,23 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
+    # transformers 5.x 會依 config.json 的 torch_dtype 載入。需依訓練混合精度模式選 dtype：
+    #   --fp16：必須以 fp32 載入（GradScaler 會踩到 "Attempting to unscale FP16 gradients"）
+    #   --bf16：可直接以 bf16 載入（不需 GradScaler，可省顯存）
+    #   皆未指定：fp32 載入
+    if getattr(training_args, "bf16", False):
+        _load_dtype = torch.bfloat16
+    else:
+        _load_dtype = torch.float32
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
+        dtype=_load_dtype,
     )
 
     if model.config.decoder_start_token_id is None:
@@ -563,11 +575,21 @@ def main():
         if not training_args.gradient_checkpointing_kwargs:
             training_args.gradient_checkpointing_kwargs = {"use_reentrant": False}
 
+    # transformers 5.x 移除了部分 helper（如 WhisperForConditionalGeneration.freeze_feature_encoder），
+    # 改以 hasattr 檢查；不存在時表示該模型無此概念，安全略過。
     if model_args.freeze_feature_encoder:
-        model.freeze_feature_encoder()
+        if hasattr(model, "freeze_feature_encoder"):
+            model.freeze_feature_encoder()
+        else:
+            logger.info("model.freeze_feature_encoder() 不存在，已略過（在 Whisper 上預設無 feature encoder 子模組）。")
 
     if model_args.freeze_encoder:
-        model.freeze_encoder()
+        if hasattr(model, "freeze_encoder"):
+            model.freeze_encoder()
+        else:
+            # 手動凍結 encoder：適用於 transformers 5.x 中沒有 freeze_encoder helper 的情況
+            for p in model.model.encoder.parameters():
+                p.requires_grad = False
         model.model.encoder.gradient_checkpointing = False
 
     if data_args.language is not None:
@@ -708,17 +730,24 @@ def main():
     )
 
     # 11. Initialize Trainer
-    trainer = Seq2SeqTrainer(
+    # transformers 5.x 將 Trainer 的 tokenizer= 改名為 processing_class=
+    import inspect as _inspect
+    _trainer_kwargs = dict(
         model=model,
         args=training_args,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
         data_collator=data_collator,
         compute_metrics=(
             compute_metrics if training_args.predict_with_generate else None
         ),
     )
+    _trainer_params = _inspect.signature(Seq2SeqTrainer.__init__).parameters
+    if "processing_class" in _trainer_params:
+        _trainer_kwargs["processing_class"] = feature_extractor
+    else:
+        _trainer_kwargs["tokenizer"] = feature_extractor
+    trainer = Seq2SeqTrainer(**_trainer_kwargs)
 
     # 12. Training
     if training_args.do_train:

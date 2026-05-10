@@ -527,13 +527,14 @@ async def create_subtitle_task(
                 except Exception as e:
                     raise RuntimeError(f"轉錄失敗: {e}")
 
-                # 標點符號處理：逐 Whisper segment（≈逐句）送 LLM，避免長文本造成幻覺；
-                # 內部以 batched 推論加速（多段同時 forward，攤平 prompt prefill）。
-                # 載入失敗 / 字元保真不過 / 例外皆會回退原文，不會讓任務失敗。
+                # 取出每個 Whisper segment 的純文字（去 CR/LF）。
                 segment_texts: List[str] = [
                     (getattr(seg, "text", "") or "").replace("\r", " ").replace("\n", " ").strip()
                     for seg in segments_list
                 ]
+
+                # 標點符號處理：使用 zhpr（p208p2002/zh-wiki-punctuation-restore），
+                # 模型約 100MB；CPU/GPU 皆能跑。任何例外回退原文，不會讓任務 fail。
                 punctuated_texts: List[str] = list(segment_texts)
                 if punctuation_module.is_enabled() and segment_texts:
                     try:

@@ -65,14 +65,12 @@ python train_asr.py ^
     --text_column_name=sentence ^
     --freeze_feature_encoder=False ^
     --gradient_checkpointing ^
-    --group_by_length ^
+    --sortish_sampler=True ^
     --fp16 ^
-    --overwrite_output_dir ^
     --streaming=False ^
     --do_train ^
     --do_eval ^
-    --predict_with_generate ^
-    --use_auth_token=False
+    --predict_with_generate
 
 endlocal
 pause
