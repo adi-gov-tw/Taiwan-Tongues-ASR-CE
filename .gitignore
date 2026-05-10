@@ -31,3 +31,4 @@ api/.env
 *.env.local
 
 *.pid
+api/auth.db
