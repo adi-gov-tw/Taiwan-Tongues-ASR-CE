@@ -1,11 +1,36 @@
 import os
+import sys
+import warnings
 from datetime import datetime, timedelta
+
+# Windows: 把 pip 裝的 nvidia cuDNN/cuBLAS bin 目錄加入 DLL 搜尋路徑，
+# 讓 ctranslate2 能載入。必須在 import faster_whisper 之前。
+# 注意：nvidia.cudnn / nvidia.cublas 是 PEP 420 namespace package，
+#       沒有 __init__.py 因此 __file__ 是 None；要改用 __path__ 取目錄。
+if sys.platform == "win32":
+    import importlib
+
+    for _pkg_name in ("nvidia.cudnn", "nvidia.cublas"):
+        try:
+            _pkg = importlib.import_module(_pkg_name)
+            _pkg_file = getattr(_pkg, "__file__", None)
+            if _pkg_file:
+                _pkg_dir = os.path.dirname(_pkg_file)
+            else:
+                _paths = list(getattr(_pkg, "__path__", []) or [])
+                _pkg_dir = _paths[0] if _paths else None
+            if _pkg_dir:
+                _bin = os.path.join(_pkg_dir, "bin")
+                if os.path.isdir(_bin):
+                    os.add_dll_directory(_bin)
+        except ImportError:
+            pass
+
 from faster_whisper import WhisperModel
 import time
 from pathlib import Path
 import librosa
 import soundfile as sf
-import pywer
 import re
 import cn2an
 import pandas as pd
@@ -59,17 +84,12 @@ def convert_time(time):
 
 
 def full_to_half(text):
-    half_width_text = ""
-    for char in text:
-        half_char = unicodedata.normalize("NFKC", char)
-        if half_char.isalpha():
-            half_char = half_char
-        half_width_text += half_char
-    return half_width_text
+    """全形 → 半形（透過 NFKC 正規化；限 Latin / 數字 / 標點，中文字不會被動到）。"""
+    return unicodedata.normalize("NFKC", text)
 
 
 def remove_special_characters_by_dataset_name(text):
-    # 移除特殊字符
+    # 移除中英常見標點，並做全形→半形
     chars_to_ignore_regex_base = r'[,"\'。，^¿¡；「」《》:：＄$\[\]〜～·・‧―─–－⋯、＼【】=<>{}_〈〉　）（—『』«»→„…(),`&＆﹁﹂#＃\\!?！;]'
 
     sentence = re.sub(chars_to_ignore_regex_base, "", text)
@@ -78,10 +98,20 @@ def remove_special_characters_by_dataset_name(text):
     return sentence
 
 
-def num_to_cn(text, mode=0):
-    method = "an2cn" if mode == 0 else "cn2an"
-    text = cn2an.transform(text, method)
-    return text
+def chinese_number_to_arabic(text: str) -> str:
+    """中文數字 → 阿拉伯數字（使用 cn2an.transform）。
+
+    例：'九百三十一' → '931'、'九十九元' → '99元'。
+    解析失敗時統一吃下例外回傳原文，並抑制 cn2an 內部 warn。
+    """
+    if not text:
+        return text
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            return cn2an.transform(text, "cn2an")
+    except Exception:
+        return text
 
 
 def find_original_transcript(audio_file):
@@ -152,8 +182,8 @@ def process_audio_folder(folder_path, output_file="transcription_results.txt"):
         print(f"處理音檔 {i}/{len(audio_files)}: {os.path.basename(audio_file)}")
 
         try:
-            # 載入音檔
-            audio, sr = librosa.load(audio_file, sr=16000, mono=False)
+            # 載入音檔（mono=True 確保 1D 陣列；stereo 會自動 down-mix）
+            audio, sr = librosa.load(audio_file, sr=16000, mono=True)
 
             # 轉錄
             segments, info = model.transcribe(
@@ -171,9 +201,9 @@ def process_audio_folder(folder_path, output_file="transcription_results.txt"):
             for segment in segments:
                 text += segment.text
 
-            # 後處理
+            # 後處理：phrase 替換 → 簡繁轉換 → 中文數字→阿拉伯數字 → 去標點/全半形 → 小寫
             processed_text = remove_special_characters_by_dataset_name(
-                s2tw.convert(replace_words(text))
+                chinese_number_to_arabic(s2tw.convert(replace_words(text)))
             ).lower()
 
             # 生成輸出檔案路徑

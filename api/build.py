@@ -89,9 +89,9 @@ def check_python_and_pip():
     """檢查Python版本和pip可用性"""
     logger.info("檢查Python環境...")
 
-    # 檢查Python版本
-    if sys.version_info < (3, 8):
-        logger.error("❌ 需要Python 3.8或更高版本")
+    # 檢查Python版本（本專案要求 Python 3.10 以上）
+    if sys.version_info[:2] < (3, 10):
+        logger.error("❌ 需要 Python 3.10 或更高版本")
         logger.error(f"當前版本: {sys.version}")
         return False
 
@@ -226,8 +226,8 @@ def install_package(package_name):
 
 
 def install_requirements_file():
-    """從 requirements.txt 和 stt_streaming 的 requirements.txt 安裝依賴"""
-    requirements_files = ["requirements.txt", "stt_streaming/requirements.txt"]
+    """從 requirements.txt 安裝依賴"""
+    requirements_files = ["requirements.txt"]
 
     for requirements_file in requirements_files:
         if os.path.exists(requirements_file):
@@ -338,7 +338,7 @@ def check_and_install_dependencies():
     logger.info("檢查依賴套件...")
 
     # 由 requirements 檔案動態取得需要檢查的套件
-    requirements_files = ["requirements.txt", "stt_streaming/requirements.txt"]
+    requirements_files = ["requirements.txt"]
     required_packages = _load_required_packages_from_requirements(requirements_files)
 
     # 定義可選的套件（安裝失敗不會阻止程序繼續）

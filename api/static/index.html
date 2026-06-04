@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taiwan Tongues ASR · 測試控制台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --border: #e6e8ef;
+      --border-strong: #d3d7e0;
+      --text: #0f172a;
+      --text-2: #475569;
+      --text-3: #94a3b8;
+      --primary: #6366f1;
+      --primary-2: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 1px rgba(15,23,42,0.03);
+      --shadow-md: 0 6px 18px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
+      --radius: 12px;
+      --radius-lg: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #f7f8fc 0%, #eef0f7 100%);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-size: 14px;
+    }
+
+    /* Top nav */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      background: rgba(255,255,255,0.78);
+      border-bottom: 1px solid rgba(15,23,42,0.06);
+    }
+    .topbar-inner {
+      max-width: 1100px; margin: 0 auto;
+      padding: 12px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      box-shadow: 0 4px 10px rgba(99,102,241,0.30);
+      display: grid; place-items: center; color: white; font-weight: 700;
+      font-size: 12.5px; letter-spacing: 0.4px;
+    }
+    .brand-name { font-weight: 600; font-size: 14.5px; }
+    .nav-links { display: flex; gap: 4px; align-items: center; }
+    .nav-link {
+      text-decoration: none; color: var(--text-2);
+      padding: 7px 11px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+      transition: all .12s ease;
+    }
+    .nav-link:hover { color: var(--text); background: rgba(15,23,42,0.04); }
+    .nav-link.active { color: var(--primary); background: rgba(99,102,241,0.10); }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    .page-head { margin-bottom: 22px; }
+    .page-head h1 {
+      margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: -0.01em;
+    }
+    .page-head p { margin: 0; color: var(--text-2); font-size: 13.5px; }
+
+    /* Health status row */
+    .health {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 18px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .health-title { font-size: 13px; font-weight: 600; color: var(--text-2); }
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 720px) {
+      .health { grid-template-columns: 1fr; }
+      .health-grid { grid-template-columns: 1fr; }
+    }
+    .health-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--text-3); flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(148,163,184,0.18);
+    }
+    .dot.ok { background: var(--success); box-shadow: 0 0 0 3px rgba(16,185,129,0.18); }
+    .dot.err { background: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,0.18); }
+    .health-label { font-size: 12px; color: var(--text-3); font-weight: 600; }
+    .health-value { font-size: 12px; color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .health-meta { display: flex; flex-direction: column; min-width: 0; }
+    .refresh-btn {
+      background: var(--surface); color: var(--text-2);
+      border: 1px solid var(--border-strong); border-radius: 7px;
+      padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: all .12s ease;
+    }
+    .refresh-btn:hover { background: var(--surface-2); color: var(--text); }
+
+    /* Auth alert */
+    .alert {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 3px solid var(--warning);
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #78350f;
+      margin-bottom: 22px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .alert .ico { color: var(--warning); flex-shrink: 0; margin-top: 1px; }
+    .alert code {
+      background: rgba(0,0,0,0.06);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    /* Login card */
+    .auth-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;
+    }
+    .auth-chip.ok { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .auth-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 22px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .login-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+    .login-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .login-title .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: linear-gradient(135deg, #eef2ff, #fce7f3); color: var(--primary); }
+    .login-sub { font-size: 12.5px; color: var(--text-3); }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .field-label { font-size: 11px; font-weight: 700; color: var(--text-2); letter-spacing: 0.06em; text-transform: uppercase; }
+    .input {
+      width: 100%;
+      border: 1px solid var(--border-strong);
+      background: white;
+      border-radius: 9px;
+      padding: 9px 11px;
+      font-size: 13.5px; color: var(--text);
+      font-family: inherit;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 9px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600;
+      border: 1px solid transparent; cursor: pointer; user-select: none;
+      transition: transform .05s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+      white-space: nowrap;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      color: white;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #ec4899 120%);
+      box-shadow: 0 6px 16px rgba(99,102,241,0.30);
+    }
+    .btn-primary:hover { box-shadow: 0 10px 22px rgba(99,102,241,0.38); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+    .btn-ghost { background: transparent; color: var(--text-2); }
+    .btn-ghost:hover { background: rgba(15,23,42,0.05); color: var(--text); }
+
+    .seg-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin: 14px 0 10px; }
+    .seg-line { height: 1px; background: var(--border); }
+    .seg-or { font-size: 11px; color: var(--text-3); font-weight: 700; letter-spacing: 0.1em; }
+
+    .login-status {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .login-status .who { font-size: 13px; color: var(--text-2); }
+    .login-status .who b { color: var(--text); font-weight: 600; }
+    .login-status .tok { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-3); }
+
+    .login-error {
+      margin-top: 10px;
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;
+      padding: 8px 12px; border-radius: 8px; font-size: 12.5px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      white-space: pre-wrap; word-break: break-all;
+    }
+
+    /* Workspace lock state */
+    .ws-card.locked { opacity: 0.62; cursor: not-allowed; }
+    .ws-card.locked:hover { transform: none; box-shadow: var(--shadow-sm); border-color: var(--border); }
+    .ws-card .lock-overlay {
+      display: none; position: absolute; top: 12px; right: 12px;
+      align-items: center; gap: 6px;
+      padding: 4px 9px; border-radius: 999px;
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;
+      font-size: 11.5px; font-weight: 600;
+    }
+    .ws-card.locked .lock-overlay { display: inline-flex; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: #0f172a; color: white; padding: 10px 16px; border-radius: 10px;
+      font-size: 13px; font-weight: 500; box-shadow: var(--shadow-md);
+      opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error { background: #b91c1c; }
+    .toast.success { background: #047857; }
+
+    .hidden { display: none !important; }
+
+    /* Workspace cards */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+    .ws-card {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+      text-decoration: none; color: inherit;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .ws-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-strong);
+    }
+    .ws-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: grid; place-items: center; color: white;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      box-shadow: 0 6px 14px rgba(99,102,241,0.22);
+    }
+    .ws-card.streaming .ws-icon { background: linear-gradient(135deg, #ec4899, #06b6d4); box-shadow: 0 6px 14px rgba(236,72,153,0.22); }
+    .ws-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+    .ws-desc { color: var(--text-2); font-size: 13.5px; line-height: 1.55; }
+    .ws-endpoint {
+      font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px;
+      padding: 8px 10px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ws-endpoint .method {
+      font-size: 10.5px; padding: 2px 6px; border-radius: 4px; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .ws-endpoint .method.post { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .ws-endpoint .method.ws { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+    .ws-cta { display: flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 600; font-size: 13.5px; margin-top: auto; }
+    .ws-card.streaming .ws-cta { color: #db2777; }
+    .ws-cta .arr { transition: transform .15s ease; }
+    .ws-card:hover .ws-cta .arr { transform: translateX(3px); }
+
+    /* Quick links bar */
+    .quicklinks {
+      margin-top: 22px;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .qlink {
+      text-decoration: none;
+      font-size: 12.5px; color: var(--text-2);
+      padding: 7px 11px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: all .12s ease;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .qlink:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+    .qlink .m { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border); }
+    .qlink:hover .m { background: white; }
+
+    /* Footer */
+    .footer {
+      max-width: 1100px; margin: 32px auto 0;
+      padding: 16px 24px; color: var(--text-3); font-size: 12px;
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+    }
+    .footer a { color: var(--text-2); text-decoration: none; }
+    .footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <div class="brand-mark">TT</div>
+        <div class="brand-name">Taiwan Tongues ASR</div>
+      </a>
+      <nav class="nav-links">
+        <a class="nav-link" href="/test_files.html" data-protected="true">離線轉錄</a>
+        <a class="nav-link" href="/test_realtime.html" data-protected="true">即時辨識</a>
+        <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+        <span id="authBadge" class="auth-chip"><span class="dot"></span><span id="authBadgeText">尚未登入</span></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <h1>測試控制台</h1>
+      <p>Combined ASR API · 檢視服務狀態，並進入離線或即時測試頁面。</p>
+    </div>
+
+    <!-- Health -->
+    <section class="health">
+      <span class="health-title">服務狀態</span>
+      <div class="health-grid">
+        <div class="health-item">
+          <span class="dot" id="dot-file"></span>
+          <div class="health-meta">
+            <span class="health-label">File ASR</span>
+            <span class="health-value" id="status-file">checking…</span>
+          </div>
+        </div>
+        <div class="health-item">
+          <span class="dot" id="dot-stream"></span>
+          <div class="health-meta">
+            <span class="health-label">Streaming ASR</span>
+            <span class="health-value" id="status-stream">checking…</span>
+          </div>
+        </div>
+        <div class="health-item">
+          <span class="dot" id="dot-auth"></span>
+          <div class="health-meta">
+            <span class="health-label">Auth</span>
+            <span class="health-value" id="status-auth">checking…</span>
+          </div>
+        </div>
+      </div>
+      <button class="refresh-btn" type="button" onclick="probeAll()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>
+        <span>重新檢測</span>
+      </button>
+    </section>
+
+    <!-- Login -->
+    <section class="login-card">
+      <div class="login-head">
+        <div class="login-title">
+          <span class="ico">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          登入
+        </div>
+        <span class="login-sub">測試頁需先登入。預設帳號 <code style="font-family:'JetBrains Mono',monospace;background:#f1f5f9;padding:1px 5px;border-radius:4px;">admin</code></span>
+      </div>
+
+      <!-- Logged-out form -->
+      <div id="loginForm">
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label" for="loginUsername">帳號</label>
+            <input id="loginUsername" class="input" placeholder="admin" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="loginPassword">密碼</label>
+            <input id="loginPassword" class="input" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <div class="field">
+            <button id="loginBtn" class="btn btn-primary" type="button" onclick="loginAndStoreToken()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              <span>登入</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="seg-row"><div class="seg-line"></div><span class="seg-or">或手動 TOKEN</span><div class="seg-line"></div></div>
+
+        <div class="form-row" style="grid-template-columns: 1fr auto;">
+          <div class="field">
+            <label class="field-label" for="manualToken">Bearer Token</label>
+            <input id="manualToken" class="input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." />
+          </div>
+          <div class="field">
+            <button class="btn btn-ghost" type="button" onclick="saveManualToken()">保存 Token</button>
+          </div>
+        </div>
+
+        <div id="loginError" class="login-error hidden"></div>
+      </div>
+
+      <!-- Logged-in status -->
+      <div id="loginStatus" class="login-status hidden">
+        <div>
+          <div class="who">已登入為 <b id="loggedUser">—</b></div>
+          <div class="tok" id="loggedToken">—</div>
+        </div>
+        <button class="btn btn-ghost" type="button" onclick="clearToken()">登出</button>
+      </div>
+    </section>
+
+    <!-- Workspaces -->
+    <section class="grid">
+      <a class="ws-card" href="/test_files.html" data-protected="true">
+        <span class="lock-overlay">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>需登入</span>
+        </span>
+        <div class="ws-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div>
+          <div class="ws-title">離線檔案辨識</div>
+          <div class="ws-desc">上傳音檔，背景處理後下載 TXT / SRT 字幕。</div>
+        </div>
+        <div class="ws-endpoint"><span class="method post">POST</span><span>/api/v1/subtitle/tasks</span></div>
+        <div class="ws-cta"><span>進入測試頁</span><span class="arr">→</span></div>
+      </a>
+
+      <a class="ws-card streaming" href="/test_realtime.html" data-protected="true">
+        <span class="lock-overlay">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>需登入</span>
+        </span>
+        <div class="ws-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div>
+          <div class="ws-title">即時串流辨識</div>
+          <div class="ws-desc">透過 WebSocket 即時將麥克風語音轉文字。</div>
+        </div>
+        <div class="ws-endpoint"><span class="method ws">WS</span><span>/ws/v1/transcript</span></div>
+        <div class="ws-cta"><span>進入測試頁</span><span class="arr">→</span></div>
+      </a>
+    </section>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- Quick links -->
+    <div class="quicklinks">
+      <a class="qlink" href="/docs" target="_blank"><span class="m">GET</span><span>/docs</span></a>
+      <a class="qlink" href="/redoc" target="_blank"><span class="m">GET</span><span>/redoc</span></a>
+      <a class="qlink" href="/openapi.json" target="_blank"><span class="m">GET</span><span>/openapi.json</span></a>
+      <a class="qlink" href="/api/health" target="_blank"><span class="m">GET</span><span>/api/health</span></a>
+      <a class="qlink" href="/stream/health" target="_blank"><span class="m">GET</span><span>/stream/health</span></a>
+      <a class="qlink" href="/api/v1/health" target="_blank"><span class="m">GET</span><span>/api/v1/health</span></a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Taiwan Tongues ASR · FastAPI · Faster-Whisper</span>
+    <span><a href="/docs" target="_blank">Swagger</a> · <a href="/redoc" target="_blank">ReDoc</a> · <a href="/openapi.json" target="_blank">OpenAPI</a></span>
+  </footer>
+
+  <script>
+    const API_BASE = '/api';
+    const TOKEN_KEY = 'asr_token';
+    const USER_KEY = 'asr_user';
+    const $ = (id) => document.getElementById(id);
+
+    async function probe(url, dotId, statusId, formatter) {
+      const dot = document.getElementById(dotId);
+      const status = document.getElementById(statusId);
+      dot.classList.remove('ok','err');
+      status.textContent = 'checking…';
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        dot.classList.add('ok');
+        status.textContent = formatter(j);
+      } catch (e) {
+        dot.classList.add('err');
+        status.textContent = 'down (' + e.message + ')';
+      }
+    }
+    function probeAll() {
+      probe('/api/health', 'dot-file', 'status-file', j => 'loaded=' + j.model_loaded);
+      probe('/stream/health', 'dot-stream', 'status-stream',
+        j => (j.asr_pipeline || '?') + ' · ' + (j.asr_device || '?') + '/' + (j.asr_compute_type || '?'));
+      probe('/api/v1/health', 'dot-auth', 'status-auth', j => j.status || '?');
+    }
+
+    /* Toast */
+    function toast(msg, kind) {
+      const t = $('toast');
+      t.className = 'toast show' + (kind ? ' ' + kind : '');
+      t.textContent = msg;
+      setTimeout(() => { t.className = 'toast'; }, 2400);
+    }
+
+    /* Auth */
+    function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+    function getUser() { return localStorage.getItem(USER_KEY) || ''; }
+    function setToken(token, user) {
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        if (user) localStorage.setItem(USER_KEY, user);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+      renderAuth();
+    }
+
+    function renderAuth() {
+      const token = getToken();
+      const user = getUser();
+      const badge = $('authBadge');
+      const badgeText = $('authBadgeText');
+      const form = $('loginForm');
+      const status = $('loginStatus');
+
+      if (token) {
+        badge.classList.add('ok');
+        badgeText.textContent = '已登入' + (user ? ' · ' + user : '');
+        form.classList.add('hidden');
+        status.classList.remove('hidden');
+        $('loggedUser').textContent = user || '—';
+        $('loggedToken').textContent = `Token ${token.slice(0,8)}…${token.slice(-4)} · ${token.length} 字元`;
+      } else {
+        badge.classList.remove('ok');
+        badgeText.textContent = '尚未登入';
+        form.classList.remove('hidden');
+        status.classList.add('hidden');
+      }
+
+      // Lock workspace cards when not authenticated
+      document.querySelectorAll('.ws-card[data-protected="true"]').forEach(el => {
+        if (token) el.classList.remove('locked');
+        else el.classList.add('locked');
+      });
+    }
+
+    function showLoginError(msg) {
+      const el = $('loginError');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+    function hideLoginError() { $('loginError').classList.add('hidden'); }
+
+    async function loginAndStoreToken() {
+      const username = ($('loginUsername').value || '').trim() || 'admin';
+      const password = $('loginPassword').value || '';
+      if (!password) { toast('請輸入密碼', 'error'); return; }
+      const btn = $('loginBtn');
+      btn.disabled = true;
+      hideLoginError();
+      try {
+        const resp = await fetch(`${API_BASE}/v1/login`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username, password, rememberMe: 1 })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data && data.token) {
+          setToken(data.token, username);
+          $('loginPassword').value = '';
+          toast('登入成功', 'success');
+        } else {
+          showLoginError(JSON.stringify(data || { error: '登入失敗' }, null, 2));
+          toast('登入失敗', 'error');
+        }
+      } catch (e) {
+        showLoginError(JSON.stringify({ error: e.message }, null, 2));
+        toast('登入發生錯誤', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    function saveManualToken() {
+      const t = ($('manualToken').value || '').trim();
+      if (!t) { toast('請貼上 Token', 'error'); return; }
+      setToken(t, 'manual');
+      $('manualToken').value = '';
+      toast('Token 已保存', 'success');
+    }
+    function clearToken() {
+      setToken('', '');
+      toast('已登出');
+    }
+
+    /* Block protected links if not logged in */
+    function bindProtectedLinks() {
+      document.querySelectorAll('a[data-protected="true"]').forEach(a => {
+        a.addEventListener('click', (e) => {
+          if (!getToken()) {
+            e.preventDefault();
+            toast('請先登入', 'error');
+            const card = document.querySelector('.login-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const u = $('loginUsername');
+            if (u) u.focus();
+          }
+        });
+      });
+    }
+
+    /* Submit login on Enter inside the form */
+    function bindEnterKey() {
+      ['loginUsername','loginPassword'].forEach(id => {
+        const el = $(id);
+        if (el) el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); loginAndStoreToken(); }
+        });
+      });
+      const m = $('manualToken');
+      if (m) m.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); saveManualToken(); }
+      });
+    }
+
+    /* Init */
+    renderAuth();
+    bindProtectedLinks();
+    bindEnterKey();
+    probeAll();
+  </script>
+</body>
+</html>

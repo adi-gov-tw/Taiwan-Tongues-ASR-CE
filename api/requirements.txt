@@ -1,5 +1,3 @@
-# 最小化依賴套件 - 用於快速安裝
-
 # FastAPI 框架
 fastapi>=0.104.0
 uvicorn>=0.24.0
@@ -9,8 +7,13 @@ python-multipart>=0.0.20
 # 機器學習和 AI
 torch>=2.1.0
 faster-whisper>=0.9.0
-numpy>=1.21.0
-transformers>=4.30.0
+numpy>=1.21.0,<2.0
+transformers>=4.24,<5
+accelerate>=0.30.0
+
+# 標點符號後處理
+zhpr>=0.1.3,<0.2
+pytorch-lightning>=2.0,<3
 
 # 音訊處理py
 librosa>=0.10.0

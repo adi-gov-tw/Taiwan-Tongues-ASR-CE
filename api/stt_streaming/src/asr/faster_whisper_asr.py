@@ -68,7 +68,7 @@ class FasterWhisperASR(ASRInterface):
                 cfg_device = None
                 cfg_compute = None
 
-            # 選擇 device
+            # 選擇 device（cfg 'auto' 或無設定時依硬體自動選擇）
             if cfg_device in ("cpu", "cuda"):
                 device = cfg_device
                 logger.info(f"使用 config 指定的設備: {device}")
@@ -88,8 +88,8 @@ class FasterWhisperASR(ASRInterface):
                     logger.warning(f"⚠️ 無法檢查 CUDA 狀態: {e}，將使用 CPU")
                     device = "cpu"
 
-            # 選擇 compute type（若未指定）
-            if cfg_compute is not None:
+            # 選擇 compute type（若 cfg 為 'auto' 或未指定，依 device 推導）
+            if cfg_compute and cfg_compute != "auto":
                 compute_type = cfg_compute
             else:
                 compute_type = "float16" if device == "cuda" else "int8"
@@ -135,7 +135,7 @@ class FasterWhisperASR(ASRInterface):
             else:
                 raise
 
-        # 依 asr_core 的穩定參數調整預設轉錄配置
+        # 依 evaluate_asr 的穩定參數調整預設轉錄配置
         self.default_transcribe_kwargs = {
             # 保留 word_timestamps 以便回傳逐字詞與時間
             "word_timestamps": False,
@@ -144,7 +144,7 @@ class FasterWhisperASR(ASRInterface):
             "vad_filter": True,
             "beam_size": 5,
             "condition_on_previous_text": True,
-            # 與 asr_core 一致，避免模型 bias 特定提示
+            # 與 evaluate_asr 一致，避免模型 bias 特定提示
             "initial_prompt": "繁體中文",
         }
 
@@ -157,9 +157,8 @@ class FasterWhisperASR(ASRInterface):
             )
             logger.debug(f"音頻文件已保存: {file_path}")
 
-            # 預設語言為 zh，若客戶端有指定則映射
-            # 語言固定 zh
-            language = "zh"
+            # 由 streaming_asr.py 在連線時設於 client.language（合法值已驗證），預設 zh
+            language = getattr(client, "language", None) or "zh"
             logger.debug(f"語言設定: {language}")
 
             logger.debug("開始轉錄...")

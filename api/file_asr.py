@@ -2,13 +2,38 @@ import os
 import sqlite3
 import asyncio
 import tempfile
+import time
 import uuid
+import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Optional, List
+
+# Windows: 把 pip 裝的 nvidia cuDNN/cuBLAS bin 目錄加入 DLL 搜尋路徑，
+# 讓 ctranslate2 能載入。必須在 import faster_whisper 之前。
+# 注意：nvidia.cudnn / nvidia.cublas 是 PEP 420 namespace package，
+#       沒有 __init__.py 因此 __file__ 是 None；要改用 __path__ 取目錄。
+if sys.platform == "win32":
+    import importlib
+
+    for _pkg_name in ("nvidia.cudnn", "nvidia.cublas"):
+        try:
+            _pkg = importlib.import_module(_pkg_name)
+            _pkg_file = getattr(_pkg, "__file__", None)
+            if _pkg_file:
+                _pkg_dir = os.path.dirname(_pkg_file)
+            else:
+                _paths = list(getattr(_pkg, "__path__", []) or [])
+                _pkg_dir = _paths[0] if _paths else None
+            if _pkg_dir:
+                _bin = os.path.join(_pkg_dir, "bin")
+                if os.path.isdir(_bin):
+                    os.add_dll_directory(_bin)
+        except ImportError:
+            pass
 
 from faster_whisper import WhisperModel
 import numpy as np
@@ -40,11 +65,9 @@ from auth_shared import (
     verify_jwt_token,
 )
 from auth_api import router as auth_router, auth_startup
+import punctuation as punctuation_module
 
-# 專案根路徑，供匯入 cer.py
 BASE_DIR = Path(__file__).parent
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from cer import compare_texts
 
 # 任務/狀態常數
 TASK_DB_PATH = os.getenv(
@@ -175,22 +198,83 @@ s2tw = opencc.OpenCC("s2tw")
 whisper_model: Optional[WhisperModel] = None
 
 
-def load_model() -> bool:
-    """載入 Whisper 模型（預設 CPU int8）。"""
-    global whisper_model
-    if whisper_model is None:
+def _resolve_device_compute() -> "tuple[str, str]":
+    """依 api/config.py 與 torch.cuda.is_available() 決定 device/compute_type。
+
+    優先序：config.py 內非 'auto' 的明確值 > 自動偵測。
+    """
+    cfg_device = None
+    cfg_compute = None
+    try:
+        import config as app_config  # api/config.py（同目錄已加入 sys.path）
+
+        cfg_device = getattr(app_config, "MODEL_DEVICE", None)
+        cfg_compute = getattr(app_config, "MODEL_COMPUTE_TYPE", None)
+    except Exception:
+        pass
+
+    if cfg_device in ("cpu", "cuda"):
+        device = cfg_device
+    else:
         try:
-            models_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models"
-            )
-            logger.info("正在使用 CPU 載入模型...")
-            logger.info(f"模型路徑: {models_path}")
-            whisper_model = WhisperModel(models_path, device="cpu", compute_type="int8")
-            logger.info("模型載入成功 (CPU)")
-        except Exception as e:
-            logger.error(f"CPU 模型載入失敗: {e}")
-            return False
-    return True
+            import torch  # noqa: WPS433
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            device = "cpu"
+
+    if cfg_compute and cfg_compute != "auto":
+        compute_type = cfg_compute
+    else:
+        compute_type = "float16" if device == "cuda" else "int8"
+
+    return device, compute_type
+
+
+def load_model() -> bool:
+    """載入 Whisper 模型；依 config.py 自動選 cuda/float16 或 cpu/int8，CUDA 失敗時 fallback CPU。
+
+    優先複用 streaming_asr 已載入的同一份 WhisperModel，避免在 GPU 上重複佔用 ~3GB 記憶體。
+    """
+    global whisper_model
+    if whisper_model is not None:
+        return True
+
+    # 嘗試複用 streaming pipeline 已載入的模型（同一份 models/，共享 GPU 記憶體）
+    try:
+        import streaming_asr  # type: ignore
+
+        streaming_pipeline = getattr(streaming_asr, "asr_pipeline", None)
+        shared = getattr(streaming_pipeline, "asr_pipeline", None) if streaming_pipeline else None
+        if shared is not None:
+            whisper_model = shared
+            logger.info("複用 streaming 已載入的 Whisper 模型（共享 GPU 記憶體）")
+            return True
+    except Exception as e:
+        logger.warning(f"無法共享 streaming 模型，將獨立載入：{e}")
+
+    models_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models"
+    )
+    device, compute_type = _resolve_device_compute()
+    logger.info(f"正在載入模型 (device={device}, compute_type={compute_type})...")
+    logger.info(f"模型路徑: {models_path}")
+    try:
+        whisper_model = WhisperModel(models_path, device=device, compute_type=compute_type)
+        logger.info(f"模型載入成功 ({device}/{compute_type})")
+        return True
+    except Exception as e:
+        logger.error(f"模型載入失敗 ({device}/{compute_type}): {e}")
+        # 若是 CUDA 失敗，自動退回 CPU int8
+        if device == "cuda":
+            try:
+                logger.warning("嘗試回退到 CPU int8 ...")
+                whisper_model = WhisperModel(models_path, device="cpu", compute_type="int8")
+                logger.info("模型載入成功 (CPU/int8 fallback)")
+                return True
+            except Exception as e2:
+                logger.error(f"CPU fallback 亦失敗: {e2}")
+        return False
 
 
 def split_sentence_to_words(text: str, is_split: bool):
@@ -232,13 +316,8 @@ def convert_time(time_value: float) -> str:
 
 
 def full_to_half(text: str) -> str:
-    half_width_text = ""
-    for char in text:
-        half_char = unicodedata.normalize("NFKC", char)
-        if half_char.isalpha():
-            half_char = half_char
-        half_width_text += half_char
-    return half_width_text
+    """全形 → 半形（NFKC；限 Latin/數字/標點，中文字不會被動到）。"""
+    return unicodedata.normalize("NFKC", text)
 
 
 def remove_special_characters_by_dataset_name(text: str) -> str:
@@ -249,93 +328,19 @@ def remove_special_characters_by_dataset_name(text: str) -> str:
     return sentence
 
 
-def num_to_cn(text: str, mode: int = 0) -> str:
-    method = "an2cn" if mode == 0 else "cn2an"
-    text = cn2an.transform(text, method)
-    return text
+def chinese_number_to_arabic(text: str) -> str:
+    """中文數字 → 阿拉伯數字（cn2an.transform）。
 
-
-def process_audio_file(
-    audio_file_path: str, reference_text: Optional[str] = None
-) -> dict:
-    """處理單一音檔並返回轉錄與（可選）CER 結果。"""
-    logger.info(f"開始處理音檔: {os.path.basename(audio_file_path)}")
-
-    if not load_model():
-        logger.error("模型載入失敗")
-        return {"error": "模型載入失敗"}
-
+    例：'九百三十一' → '931'。解析失敗時統一吃下例外回傳原文，並抑制 cn2an 內部 warn。
+    """
+    if not text:
+        return text
     try:
-        logger.debug("正在載入音檔...")
-        # 強制載入為單聲道 16kHz，避免 VAD/拼接時出現維度不一致
-        audio, sr = librosa.load(audio_file_path, sr=16000, mono=True)
-        # 確保為 1D float32 連續陣列
-        if hasattr(audio, "ndim") and audio.ndim > 1:
-            audio = librosa.to_mono(audio)
-        audio = np.ascontiguousarray(audio, dtype=np.float32)
-        logger.debug(f"音檔載入成功，採樣率: {sr}Hz")
-
-        logger.info("開始語音轉錄...")
-        start_time = datetime.now()
-        segments, info = whisper_model.transcribe(
-            audio,
-            language="zh",
-            word_timestamps=False,
-            vad_filter=True,
-            beam_size=5,
-            condition_on_previous_text=True,
-            initial_prompt="",
-        )
-        processing_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"轉錄完成，耗時: {processing_time:.2f}秒")
-
-        text = "".join([seg.text for seg in segments])
-        logger.debug(f"原始轉錄結果: {text}")
-
-        logger.debug("開始後處理...")
-        processed_text = remove_special_characters_by_dataset_name(
-            s2tw.convert(replace_words(text))
-        ).lower()
-        logger.info(f"後處理完成，最終結果: {processed_text}")
-
-        result: dict = {
-            "success": True,
-            "asr_result": processed_text,
-            "original_text": reference_text,
-            "cer_result": None,
-            "processing_time": processing_time,
-        }
-
-        if reference_text:
-            logger.info("開始 CER 比對...")
-            cer_result = compare_texts(reference_text, processed_text)
-            if cer_result:
-                result["cer_result"] = {
-                    "correct_rate": cer_result.correct_rate,
-                    "cer_rate": cer_result.cer_rate,
-                    "total_errors": cer_result.total_errors,
-                    "substitutions_count": cer_result.substitutions_count,
-                    "deletions_count": cer_result.deletions_count,
-                    "insertions_count": cer_result.insertions_count,
-                    "total_chars": cer_result.total_chars,
-                    "substitutions_errors": cer_result.substitutions_errors,
-                    "deletions_errors": cer_result.deletions_errors,
-                    "insertions_errors": cer_result.insertions_errors,
-                    "reference_highlighted": cer_result.reference_highlighted,
-                    "hypothesis_highlighted": cer_result.hypothesis_highlighted,
-                }
-                logger.info(
-                    f"CER 比對完成: CER={cer_result.cer_rate:.4f}, 正確率={cer_result.correct_rate:.2f}%"
-                )
-            else:
-                logger.warning("CER 比對失敗")
-
-        logger.info("音檔處理完成")
-        return result
-
-    except Exception as e:
-        logger.error(f"處理音檔時發生錯誤: {str(e)}", exc_info=True)
-        return {"error": f"處理音檔時發生錯誤: {str(e)}"}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            return cn2an.transform(text, "cn2an")
+    except Exception:
+        return text
 
 
 # 路由
@@ -370,10 +375,21 @@ async def lifespan(app: FastAPI):
 app.router.lifespan_context = lifespan
 
 
+SUPPORTED_LANGUAGES = ("zh", "id")
+
+
+def _resolve_language(lang: Optional[str]) -> str:
+    if not lang:
+        return "zh"
+    code = str(lang).strip().lower()
+    return code if code in SUPPORTED_LANGUAGES else "zh"
+
+
 @app.post("/api/v1/subtitle/tasks")
 async def create_subtitle_task(
     audio: UploadFile = File(...),
     reference_text: Optional[str] = Form(default=None),
+    language: Optional[str] = Form(default="zh"),
     _: dict = Depends(_require_auth),
 ):
     """建立任務，背景處理音檔並產出字幕。"""
@@ -436,8 +452,8 @@ async def create_subtitle_task(
             )
             conn.commit()
 
-        # 背景處理
-        async def _worker(_task_id: int, _file_path: str, _ref_text: Optional[str]):
+        # 背景處理（sync function，透過 asyncio.to_thread 跑在 thread pool 避免阻塞 event loop）
+        def _worker(_task_id: int, _file_path: str, _ref_text: Optional[str], _lang: str):
             try:
                 with _tasks_conn() as conn:
                     conn.execute(
@@ -450,34 +466,108 @@ async def create_subtitle_task(
                 if not load_model():
                     raise RuntimeError("模型載入失敗")
 
-                # 執行轉錄（保留 segments 以產生 SRT）
+                # 執行轉錄（保留 segments 以產生 SRT，並逐段更新進度）
                 try:
                     audio_data, _sr = librosa.load(_file_path, sr=16000, mono=True)
                     audio_data = np.ascontiguousarray(audio_data, dtype=np.float32)
+
+                    # 載入完音檔後拉到 10%，讓使用者看到「進入轉錄階段」
+                    with _tasks_conn() as conn:
+                        conn.execute(
+                            "UPDATE subtitle_tasks SET progress=?, updated_at=? WHERE id=?",
+                            (10, _now_iso(), _task_id),
+                        )
+                        conn.commit()
+
                     segs, info = whisper_model.transcribe(
                         audio_data,
-                        language="zh",
+                        language=_lang,
                         word_timestamps=False,
                         vad_filter=True,
                         beam_size=5,
                         condition_on_previous_text=True,
                         initial_prompt="",
                     )
-                    # 重要：faster-whisper 可能回傳 generator，先物件化避免被前次遍歷耗盡
-                    segments_list = list(segs)
+                    total_duration = float(getattr(info, "duration", 0) or 0)
+
+                    # faster-whisper 回傳 generator；逐段 materialize 以即時更新進度
+                    segments_list = []
+                    last_written = 10
+                    last_write_ts = time.monotonic()
+                    for seg in segs:
+                        segments_list.append(seg)
+                        if total_duration > 0:
+                            seg_end = float(getattr(seg, "end", 0.0) or 0.0)
+                            ratio = max(0.0, min(1.0, seg_end / total_duration))
+                            # 將 10%~95% 區間映射到實際處理進度，留 5% 給後處理/落檔
+                            progress_now = 10 + int(ratio * 85)
+                        else:
+                            progress_now = min(95, last_written + 1)
+                        # 節流：進度增 ≥ 2 或距離上次寫入 ≥ 0.5s 才寫 DB
+                        if progress_now - last_written >= 2 or (time.monotonic() - last_write_ts) >= 0.5:
+                            try:
+                                with _tasks_conn() as conn:
+                                    conn.execute(
+                                        "UPDATE subtitle_tasks SET progress=?, updated_at=? WHERE id=?",
+                                        (progress_now, _now_iso(), _task_id),
+                                    )
+                                    conn.commit()
+                            except Exception:
+                                pass
+                            last_written = progress_now
+                            last_write_ts = time.monotonic()
+
+                    # 轉錄完成，進入後處理（標點）階段，標 95%
+                    with _tasks_conn() as conn:
+                        conn.execute(
+                            "UPDATE subtitle_tasks SET progress=?, updated_at=? WHERE id=?",
+                            (95, _now_iso(), _task_id),
+                        )
+                        conn.commit()
                 except Exception as e:
                     raise RuntimeError(f"轉錄失敗: {e}")
 
-                # 組裝文字與 SRT
-                full_text = "".join([seg.text for seg in segments_list])
-                processed_text = remove_special_characters_by_dataset_name(
-                    s2tw.convert(replace_words(full_text))
-                ).lower()
+                # 取出每個 Whisper segment 的純文字（去 CR/LF）。
+                segment_texts: List[str] = [
+                    (getattr(seg, "text", "") or "").replace("\r", " ").replace("\n", " ").strip()
+                    for seg in segments_list
+                ]
 
-                # 產出 TXT
+                # 標點符號處理：使用 zhpr（p208p2002/zh-wiki-punctuation-restore），
+                # 模型約 100MB；CPU/GPU 皆能跑。任何例外回退原文，不會讓任務 fail。
+                punctuated_texts: List[str] = list(segment_texts)
+                if punctuation_module.is_enabled() and segment_texts:
+                    try:
+                        processor = punctuation_module.get_processor()
+
+                        # 進度條從 95% 推到 99%（保留最後 1% 給落檔）
+                        def _on_progress(done: int, total: int) -> None:
+                            if total <= 0:
+                                return
+                            progress_now = 95 + int(done / total * 4)
+                            try:
+                                with _tasks_conn() as conn:
+                                    conn.execute(
+                                        "UPDATE subtitle_tasks SET progress=?, updated_at=? WHERE id=?",
+                                        (progress_now, _now_iso(), _task_id),
+                                    )
+                                    conn.commit()
+                            except Exception:
+                                pass
+
+                        punctuated_texts = processor.punctuate_segments(
+                            segment_texts, progress_callback=_on_progress
+                        )
+                    except Exception as e:
+                        logger.warning(f"標點階段失敗，輸出未加標點之原文：{e}")
+                        punctuated_texts = list(segment_texts)
+
+                # 組裝文字（使用標點後的逐段文字串接）
+                full_text = "".join(punctuated_texts)
+
                 result_txt_path = os.path.join(task_dir, f"{_task_id}.txt")
                 with open(result_txt_path, "w", encoding="utf-8") as f:
-                    f.write(processed_text)
+                    f.write(full_text)
 
                 # 產出 SRT（嚴格符合 hh:mm:ss,mmm 並處理毫秒進位、CRLF 換行）
                 result_srt_path = os.path.join(task_dir, f"{_task_id}.srt")
@@ -500,15 +590,12 @@ async def create_subtitle_task(
                     with open(
                         result_srt_path, "w", encoding="utf-8", newline="\r\n"
                     ) as srt:
-                        for idx, seg in enumerate(segments_list, start=1):
+                        for idx, (seg, text_line) in enumerate(
+                            zip(segments_list, punctuated_texts), start=1
+                        ):
                             start_ts = fmt_ts(getattr(seg, "start", 0.0))
                             end_ts = fmt_ts(getattr(seg, "end", 0.0))
-                            text_line = (
-                                (getattr(seg, "text", "") or "")
-                                .replace("\r", " ")
-                                .replace("\n", " ")
-                                .strip()
-                            )
+                            text_line = (text_line or "").replace("\r", " ").replace("\n", " ").strip()
                             srt.write(f"{idx}\r\n")
                             srt.write(f"{start_ts} --> {end_ts}\r\n")
                             srt.write(f"{text_line}\r\n\r\n")
@@ -516,12 +603,12 @@ async def create_subtitle_task(
                     # 若 SRT 失敗，記錄錯誤但不中斷 TXT 產出
                     logger.warning(f"SRT 產生失敗: {e}")
 
-                # 更新資料庫完成
+                # 更新資料庫完成（status=3 表示任務最終成功，符合 README 規格）
                 with _tasks_conn() as conn:
                     conn.execute(
                         "UPDATE subtitle_tasks SET status=?, progress=?, result_txt_path=?, result_srt_path=?, updated_at=? WHERE id=?",
                         (
-                            STATUS_AUDIO_DONE,
+                            STATUS_SUCCESS,
                             100,
                             result_txt_path,
                             result_srt_path,
@@ -539,8 +626,13 @@ async def create_subtitle_task(
                     )
                     conn.commit()
 
+        resolved_lang = _resolve_language(language)
         try:
-            asyncio.create_task(_worker(task_id, temp_file_path, reference_text))
+            asyncio.create_task(
+                asyncio.to_thread(
+                    _worker, task_id, temp_file_path, reference_text, resolved_lang
+                )
+            )
         except Exception as e:
             logger.error(f"背景任務建立失敗: {e}")
             with _tasks_conn() as conn:
@@ -685,10 +777,29 @@ async def download_subtitle(
         return JSONResponse(status_code=500, content={"error": f"下載失敗: {e}"})
 
 
+STATIC_DIR = BASE_DIR / "static"
+
+
+@app.get("/")
+def get_index_html():
+    """根路徑導引頁：列出兩種辨識服務、健康檢查與 Swagger 文件入口。"""
+    index_file = STATIC_DIR / "index.html"
+    try:
+        if index_file.exists():
+            return FileResponse(str(index_file), media_type="text/html")
+        return JSONResponse(
+            status_code=404, content={"error": "index.html 不存在"}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, content={"error": f"讀取 index.html 發生錯誤: {e}"}
+        )
+
+
 @app.get("/test_files.html")
 def get_test_files_html():
-    """回傳專案目錄中的 test_files.html (健康檢查/模型資訊/單一音檔)"""
-    test_file = BASE_DIR / "test_files.html"
+    """回傳 static/test_files.html (健康檢查/模型資訊/單一音檔)"""
+    test_file = STATIC_DIR / "test_files.html"
     try:
         if test_file.exists():
             return FileResponse(str(test_file), media_type="text/html")
@@ -703,8 +814,8 @@ def get_test_files_html():
 
 @app.get("/test_realtime.html")
 async def get_test_realtime_html():
-    """回傳專案目錄中的 test_realtime.html (即時辨識頁)"""
-    test_file = BASE_DIR / "test_realtime.html"
+    """回傳 static/test_realtime.html (即時辨識頁)"""
+    test_file = STATIC_DIR / "test_realtime.html"
     try:
         if test_file.exists():
             return FileResponse(str(test_file), media_type="text/html")

@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taiwan Tongues · 離線轉錄工作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --border: #e6e8ef;
+      --border-strong: #d3d7e0;
+      --text: #0f172a;
+      --text-2: #475569;
+      --text-3: #94a3b8;
+      --primary: #6366f1;
+      --primary-2: #8b5cf6;
+      --primary-3: #06b6d4;
+      --accent: #ec4899;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 1px rgba(15,23,42,0.03);
+      --shadow-md: 0 8px 24px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
+      --shadow-lg: 0 24px 60px rgba(15,23,42,0.10), 0 8px 16px rgba(15,23,42,0.04);
+      --radius: 12px;
+      --radius-lg: 18px;
+      --radius-xl: 24px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #f7f8fc 0%, #eef0f7 100%);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-size: 14px;
+    }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      background: rgba(255,255,255,0.70);
+      border-bottom: 1px solid rgba(15,23,42,0.06);
+    }
+    .topbar-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      box-shadow: 0 4px 10px rgba(99,102,241,0.30);
+      display: grid; place-items: center; color: white; font-weight: 700;
+      font-size: 12.5px; letter-spacing: 0.4px;
+    }
+    .brand-name { font-weight: 600; font-size: 14.5px; }
+    .nav-links { display: flex; gap: 4px; align-items: center; }
+    .nav-link {
+      text-decoration: none; color: var(--text-2);
+      padding: 7px 11px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+      transition: all .12s ease;
+    }
+    .nav-link:hover { color: var(--text); background: rgba(15,23,42,0.04); }
+    .nav-link.active { color: var(--primary); background: rgba(99,102,241,0.10); }
+    .auth-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;
+    }
+    .auth-chip.ok { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .auth-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+    .page-head { margin-bottom: 18px; }
+    .page-head h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+    .page-head p { margin: 0; color: var(--text-2); font-size: 13.5px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: 20px;
+    }
+    .card + .card { margin-top: 20px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+    .card-title { font-size: 15px; font-weight: 700; letter-spacing: 0.1px; display: flex; align-items: center; gap: 10px; }
+    .card-title .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: linear-gradient(135deg, #eef2ff, #fce7f3); color: var(--primary); }
+    .card-sub { font-size: 13px; color: var(--text-3); }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .label { font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px; text-transform: uppercase; }
+    .input, .textarea, select {
+      width: 100%;
+      border: 1px solid var(--border-strong);
+      background: white;
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-size: 14px; color: var(--text);
+      font-family: inherit;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .input:focus, .textarea:focus, select:focus {
+      outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99,102,241,0.14);
+    }
+    .textarea { min-height: 96px; resize: vertical; }
+    .helper { font-size: 12px; color: var(--text-3); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      border: 1px solid transparent; cursor: pointer; user-select: none;
+      transition: transform .05s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+      white-space: nowrap;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      color: white;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #ec4899 120%);
+      box-shadow: 0 8px 20px rgba(99,102,241,0.32);
+    }
+    .btn-primary:hover { box-shadow: 0 12px 26px rgba(99,102,241,0.40); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+    .btn-secondary {
+      background: white; color: var(--text); border-color: var(--border-strong);
+    }
+    .btn-secondary:hover { background: var(--surface-2); }
+    .btn-ghost { background: transparent; color: var(--text-2); }
+    .btn-ghost:hover { background: rgba(15,23,42,0.05); color: var(--text); }
+    .btn-sm { padding: 7px 11px; font-size: 13px; border-radius: 8px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .seg-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin: 18px 0 4px; }
+    .seg-line { height: 1px; background: var(--border); }
+    .seg-or { font-size: 11px; color: var(--text-3); font-weight: 700; letter-spacing: 0.1em; }
+
+    .dropzone {
+      border: 1.5px dashed var(--border-strong);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #fbfbff 0%, #f5f7ff 100%);
+      padding: 28px 18px; text-align: center; cursor: pointer;
+      transition: all .15s ease; position: relative; overflow: hidden;
+    }
+    .dropzone:hover { border-color: var(--primary); background: linear-gradient(180deg, #f5f3ff 0%, #eef2ff 100%); }
+    .dropzone.dragover { border-color: var(--primary); border-style: solid; background: linear-gradient(180deg, #eef2ff 0%, #fce7f3 100%); }
+    .dz-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: grid; place-items: center; margin: 0 auto 10px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      box-shadow: 0 8px 20px rgba(99,102,241,0.28);
+    }
+    .dz-title { font-weight: 600; color: var(--text); font-size: 15px; }
+    .dz-sub { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+    .dz-formats { font-size: 11.5px; color: var(--text-3); margin-top: 8px; letter-spacing: 0.04em; }
+
+    .file-pill {
+      margin-top: 12px;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: white;
+    }
+    .file-pill .ico { width: 32px; height: 32px; border-radius: 8px; background: rgba(99,102,241,0.10); color: var(--primary); display: grid; place-items: center; }
+    .file-pill .meta { flex: 1; min-width: 0; }
+    .file-pill .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-pill .size { font-size: 12px; color: var(--text-3); }
+    .file-pill .x { background: transparent; border: 0; color: var(--text-3); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .file-pill .x:hover { background: rgba(239,68,68,0.10); color: var(--danger); }
+
+    .status-card { display: flex; flex-direction: column; gap: 14px; }
+    .status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: #f1f5f9; color: var(--text-2); border: 1px solid var(--border);
+    }
+    .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .status-pill.processing { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .status-pill.processing .dot { animation: pulse 1.4s ease-in-out infinite; }
+    .status-pill.success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .status-pill.failed { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    .status-pill.idle { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+    .progress-wrap { width: 100%; }
+    .progress {
+      height: 8px; background: #eef2f7; border-radius: 999px; overflow: hidden;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
+      border-radius: 999px;
+      transition: width .35s ease;
+      box-shadow: 0 0 12px rgba(99,102,241,0.45);
+    }
+    .progress-bar.failed { background: linear-gradient(90deg, #ef4444, #ec4899); box-shadow: 0 0 12px rgba(239,68,68,0.45); }
+    .progress-bar.success { background: linear-gradient(90deg, #10b981, #06b6d4); box-shadow: 0 0 12px rgba(16,185,129,0.45); }
+    .progress-meta { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-3); }
+
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; }
+    @media (max-width: 600px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+    .step {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+      background: white; font-size: 12.5px; color: var(--text-3); font-weight: 500;
+      transition: all .15s ease;
+    }
+    .step .num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #f1f5f9; color: var(--text-3); font-size: 11px; font-weight: 700; }
+    .step.active { border-color: var(--primary); color: var(--primary); background: #eef2ff; }
+    .step.active .num { background: var(--primary); color: white; }
+    .step.done { border-color: #a7f3d0; color: #047857; background: #ecfdf5; }
+    .step.done .num { background: #10b981; color: white; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; flex: 1; }
+    @media (max-width: 480px) { .meta-grid { grid-template-columns: 1fr; } }
+    .meta-item { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .meta-item .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 700; }
+    .meta-item .v { font-size: 13.5px; color: var(--text); margin-top: 4px; font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace; word-break: break-all; }
+
+    .download-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+    @media (max-width: 480px) { .download-grid { grid-template-columns: 1fr; } }
+    .dl-card {
+      display: flex; align-items: center; gap: 12px; padding: 14px;
+      border: 1px solid var(--border); border-radius: 12px; background: white;
+      transition: all .15s ease; cursor: pointer;
+    }
+    .dl-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); border-color: var(--primary); }
+    .dl-card .ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: white; font-weight: 700; font-size: 12px; letter-spacing: 0.04em; }
+    .dl-card.txt .ico { background: linear-gradient(135deg, #06b6d4, #6366f1); }
+    .dl-card.srt .ico { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+    .dl-card.dia .ico { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    .dl-card .meta { flex: 1; }
+    .dl-card .t { font-weight: 600; font-size: 14px; }
+    .dl-card .s { font-size: 12px; color: var(--text-3); }
+    .dl-card .arrow { color: var(--text-3); font-size: 18px; }
+
+    .console {
+      background: #0b1020;
+      color: #cbd5e1;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid #1e2a4a;
+    }
+    .console.error { color: #fecaca; border-color: #7f1d1d; background: #1a0a0e; }
+    .console.loading { color: #c7d2fe; }
+
+    .footer { max-width: 1100px; margin: 32px auto 0; padding: 16px 24px; color: var(--text-3); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--border); }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: #0f172a; color: white; padding: 10px 16px; border-radius: 10px;
+      font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg);
+      opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error { background: #b91c1c; }
+    .toast.success { background: #047857; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <div class="brand-mark">TT</div>
+        <div class="brand-name">Taiwan Tongues ASR</div>
+      </a>
+      <nav class="nav-links">
+        <a class="nav-link active" href="/test_files.html">離線轉錄</a>
+        <a class="nav-link" href="/test_realtime.html">即時辨識</a>
+        <a class="nav-link" href="/docs" target="_blank">API Docs</a>
+        <span id="authBadge" class="auth-chip"><span class="dot"></span><span id="authBadgeText">尚未登入</span></span>
+        <a class="nav-link" href="/" id="logoutLink" title="返回登入頁">登出</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <h1>離線檔案辨識</h1>
+      <p>上傳音檔，背景處理後下載 TXT / SRT 字幕；可選填參考文本以計算 CER。</p>
+    </div>
+
+    <div class="grid">
+      <div>
+        <!-- Upload -->
+        <section class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <span class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
+              </span>
+              選擇音檔
+            </div>
+            <span class="card-sub">支援 WAV / MP3 / FLAC / M4A / AAC</span>
+          </div>
+
+          <div id="dropzone" class="dropzone" tabindex="0">
+            <div class="dz-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="dz-title">將音檔拖放至此，或點此選擇</div>
+            <div class="dz-sub">最大檔案大小依伺服器設定，建議 16 kHz 單聲道音質最佳</div>
+            <div class="dz-formats">WAV · MP3 · FLAC · M4A · AAC</div>
+            <input type="file" id="audioFile" accept=".wav,.mp3,.flac,.m4a,.aac" style="display:none" />
+          </div>
+
+          <div id="filePill" class="file-pill hidden">
+            <div class="ico">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <div class="meta">
+              <div class="name" id="fileName">—</div>
+              <div class="size" id="fileSize">—</div>
+            </div>
+            <button class="x" id="fileRemove" title="移除檔案">×</button>
+          </div>
+
+          <div style="margin-top: 18px;" class="form-row">
+            <div class="field">
+              <label class="label" for="languageSelect">辨識語言</label>
+              <select id="languageSelect" class="input">
+                <option value="zh" selected>中台客英</option>
+                <option value="id">印尼</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">音訊規格</label>
+              <input class="input" value="16 kHz · 單聲道（自動轉換）" disabled />
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <div class="field">
+              <label class="label" for="referenceText">參考文本 <span style="text-transform:none;color:var(--text-3);font-weight:500;">（選填，用於計算 CER）</span></label>
+              <textarea id="referenceText" class="textarea" placeholder="若提供參考文本，系統將回傳字元錯誤率 (CER)，協助你評估辨識品質。"></textarea>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="helper">每次任務會回傳 task id，平台會背景處理並產生 TXT/SRT。</div>
+            <div class="btn-row">
+              <button class="btn btn-secondary" id="btnReset" type="button">重置</button>
+              <button class="btn btn-primary" id="submitBtn" type="button" onclick="transcribeFile()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>開始轉錄</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Status -->
+        <section class="card status-card">
+          <div class="card-head">
+            <div class="card-title">
+              <span class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              任務狀態
+            </div>
+            <span class="card-sub" id="taskTimer">—</span>
+          </div>
+
+          <div class="status-row">
+            <div class="meta-grid">
+              <div class="meta-item"><div class="k">Task ID</div><div class="v" id="taskIdView">—</div></div>
+              <div class="meta-item"><div class="k">狀態碼</div><div class="v" id="statusCodeView">—</div></div>
+            </div>
+            <div id="statusPill" class="status-pill idle"><span class="dot"></span><span id="statusPillText">尚未開始</span></div>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+            <div class="progress-meta"><span id="progressLabel">等待任務</span><span id="progressPct">0%</span></div>
+          </div>
+
+          <div class="steps">
+            <div class="step" data-step="upload"><span class="num">1</span><span>上傳</span></div>
+            <div class="step" data-step="queue"><span class="num">2</span><span>排隊</span></div>
+            <div class="step" data-step="process"><span class="num">3</span><span>辨識中</span></div>
+            <div class="step" data-step="done"><span class="num">4</span><span>完成</span></div>
+          </div>
+        </section>
+
+        <!-- Result -->
+        <section class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <span class="ico">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </span>
+              成果與下載
+            </div>
+            <span class="card-sub" id="resultSub">尚無結果</span>
+          </div>
+          <div id="downloadGrid" class="download-grid hidden"></div>
+          <div id="transcribeResult" class="console hidden"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Taiwan Tongues ASR</span>
+    <span>POST /api/v1/subtitle/tasks</span>
+  </footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const API_BASE = 'http://localhost:5000/api';
+    const TOKEN_KEY = 'asr_token';
+    let STATUS_TIMER = null;
+    let CURRENT_TASK_ID = null;
+    let TASK_STARTED_AT = null;
+    let TICK_TIMER = null;
+
+    function statusLabel(code) {
+      const map = {
+        0: '等待確認檔案',
+        3: '成功',
+        4: '失敗',
+        5: '已取消',
+        10: '音檔上傳中',
+        11: '等待處理逐字稿',
+        12: '檔案下載中',
+        13: '逐字稿處理中',
+        20: '音檔等待處理',
+        21: '音檔處理中',
+        22: '音檔處理完成',
+        30: '串流進行中',
+        31: '串流成功',
+        32: '串流失敗',
+        33: '串流無內容'
+      };
+      return map.hasOwnProperty(code) ? map[code] : `未知狀態(${code})`;
+    }
+    function statusKind(code) {
+      const c = Number(code);
+      if (c === 3 || c === 22 || c === 31) return 'success';
+      if (c === 4 || c === 5 || c === 32) return 'failed';
+      if ([10, 11, 12, 13, 20, 21, 30].includes(c)) return 'processing';
+      return 'idle';
+    }
+    function activeStep(code) {
+      const c = Number(code);
+      if (c === 3 || c === 22) return 'done';
+      if (c === 21 || c === 13) return 'process';
+      if (c === 11 || c === 20) return 'queue';
+      if (c === 10 || c === 12) return 'upload';
+      return null;
+    }
+
+    const $ = (id) => document.getElementById(id);
+
+    function setStatusPill(code) {
+      const pill = $('statusPill');
+      const text = $('statusPillText');
+      const kind = statusKind(code);
+      pill.classList.remove('idle','processing','success','failed');
+      pill.classList.add(kind);
+      text.textContent = (code === undefined || code === null) ? '尚未開始' : statusLabel(code);
+    }
+    function setSteps(code) {
+      const target = activeStep(code);
+      const order = ['upload','queue','process','done'];
+      const idx = order.indexOf(target);
+      document.querySelectorAll('.step').forEach((el, i) => {
+        el.classList.remove('active','done');
+        if (target === null) return;
+        if (i < idx) el.classList.add('done');
+        else if (i === idx) el.classList.add(target === 'done' ? 'done' : 'active');
+      });
+    }
+    function setProgress(progress, code) {
+      const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+      const bar = $('progressBar');
+      bar.style.width = pct + '%';
+      bar.classList.remove('failed','success');
+      const kind = statusKind(code);
+      if (kind === 'failed') bar.classList.add('failed');
+      else if (kind === 'success') bar.classList.add('success');
+      $('progressPct').textContent = pct + '%';
+      $('progressLabel').textContent = (code === undefined || code === null) ? '等待任務' : statusLabel(code);
+    }
+    function setTaskMeta(taskId, code) {
+      $('taskIdView').textContent = taskId || '—';
+      $('statusCodeView').textContent = (code === undefined || code === null) ? '—' : String(code);
+    }
+    function startTaskTimer() {
+      TASK_STARTED_AT = Date.now();
+      if (TICK_TIMER) clearInterval(TICK_TIMER);
+      TICK_TIMER = setInterval(() => {
+        const s = Math.floor((Date.now() - TASK_STARTED_AT) / 1000);
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        $('taskTimer').textContent = `已執行 ${m}:${String(r).padStart(2,'0')}`;
+      }, 1000);
+    }
+    function stopTaskTimer() {
+      if (TICK_TIMER) { clearInterval(TICK_TIMER); TICK_TIMER = null; }
+    }
+
+    function toast(msg, kind) {
+      const t = $('toast');
+      t.className = 'toast show' + (kind ? ' ' + kind : '');
+      t.textContent = msg;
+      setTimeout(() => { t.className = 'toast'; }, 2400);
+    }
+
+    /* Auth — login UI lives on the home page; this page only reads the token */
+    const USER_KEY = 'asr_user';
+    function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+    function getUser() { return localStorage.getItem(USER_KEY) || ''; }
+    function requireAuthOrRedirect() {
+      if (!getToken()) {
+        window.location.replace('/');
+        return false;
+      }
+      return true;
+    }
+    function updateAuthStatus() {
+      const token = getToken();
+      const user = getUser();
+      const badge = $('authBadge');
+      const badgeText = $('authBadgeText');
+      if (token) {
+        badge.classList.add('ok');
+        badgeText.textContent = '已登入' + (user ? ' · ' + user : '');
+      } else {
+        badge.classList.remove('ok');
+        badgeText.textContent = '尚未登入';
+      }
+    }
+    function logoutAndGoHome() {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      window.location.replace('/');
+    }
+
+    /* Drop zone */
+    const dropzone = $('dropzone');
+    const fileInput = $('audioFile');
+    const filePill = $('filePill');
+
+    function fmtSize(n) {
+      if (!Number.isFinite(n)) return '—';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function setSelectedFile(file) {
+      if (!file) {
+        filePill.classList.add('hidden');
+        $('fileName').textContent = '—';
+        $('fileSize').textContent = '—';
+        return;
+      }
+      filePill.classList.remove('hidden');
+      $('fileName').textContent = file.name;
+      $('fileSize').textContent = fmtSize(file.size) + ' · ' + (file.type || '未知格式');
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', (e) => {
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        fileInput.files = dt.files;
+        setSelectedFile(f);
+      }
+    });
+    fileInput.addEventListener('change', () => setSelectedFile(fileInput.files[0]));
+    $('fileRemove').addEventListener('click', (e) => { e.stopPropagation(); fileInput.value = ''; setSelectedFile(null); });
+    $('btnReset').addEventListener('click', () => {
+      fileInput.value = '';
+      setSelectedFile(null);
+      $('referenceText').value = '';
+      $('transcribeResult').classList.add('hidden');
+      $('downloadGrid').classList.add('hidden');
+      $('downloadGrid').innerHTML = '';
+      setTaskMeta(null, null);
+      setStatusPill(null);
+      setProgress(0, null);
+      setSteps(null);
+      $('resultSub').textContent = '尚無結果';
+      $('taskTimer').textContent = '—';
+      stopTaskTimer();
+      if (STATUS_TIMER) { clearInterval(STATUS_TIMER); STATUS_TIMER = null; }
+      CURRENT_TASK_ID = null;
+    });
+
+    function showResult(elementId, data, isError = false) {
+      const element = $(elementId);
+      element.classList.remove('hidden','loading','error');
+      element.classList.add('console');
+      if (isError) element.classList.add('error');
+      element.textContent = JSON.stringify(data, null, 2);
+    }
+    function showLoading(elementId, msg) {
+      const element = $(elementId);
+      element.classList.remove('hidden','error');
+      element.className = 'console loading';
+      element.textContent = msg || '處理中…';
+    }
+
+    async function transcribeFile() {
+      const btn = $('submitBtn');
+      const referenceText = $('referenceText').value;
+      if (!fileInput.files[0]) { toast('請先選擇音檔', 'error'); return; }
+      const token = getToken();
+      if (!token) { toast('需要登入，將返回首頁', 'error'); setTimeout(() => window.location.replace('/'), 800); return; }
+
+      if (STATUS_TIMER) { clearInterval(STATUS_TIMER); STATUS_TIMER = null; }
+      CURRENT_TASK_ID = null;
+
+      btn.disabled = true;
+      btn.querySelector('span').textContent = '建立任務中…';
+
+      $('downloadGrid').classList.add('hidden');
+      $('downloadGrid').innerHTML = '';
+      $('resultSub').textContent = '任務進行中';
+      setStatusPill(10);
+      setSteps(10);
+      setProgress(2, 10);
+      setTaskMeta('—', 10);
+      startTaskTimer();
+      showLoading('transcribeResult', '上傳中…');
+
+      const language = ($('languageSelect') || {}).value || 'zh';
+      const formData = new FormData();
+      formData.append('audio', fileInput.files[0]);
+      if (referenceText) formData.append('reference_text', referenceText);
+      formData.append('language', language);
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/subtitle/tasks`, {
+          method: 'POST',
+          body: formData,
+          headers: { 'authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        if (response.ok && data && typeof data.id !== 'undefined') {
+          CURRENT_TASK_ID = data.id;
+          showResult('transcribeResult', { message: '任務已建立', id: CURRENT_TASK_ID, language }, false);
+          setTaskMeta(CURRENT_TASK_ID, 20);
+          setStatusPill(20);
+          setSteps(20);
+          setProgress(8, 20);
+          startStatusPolling(CURRENT_TASK_ID, token);
+        } else {
+          showResult('transcribeResult', data || { error: '建立任務失敗' }, true);
+          setStatusPill(4);
+          setSteps(null);
+          stopTaskTimer();
+          toast('建立任務失敗', 'error');
+        }
+      } catch (error) {
+        showResult('transcribeResult', { error: error.message }, true);
+        setStatusPill(4);
+        setSteps(null);
+        stopTaskTimer();
+        toast('網路錯誤', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.querySelector('span').textContent = '開始轉錄';
+      }
+    }
+
+    function startStatusPolling(taskId, token) {
+      STATUS_TIMER = setInterval(async () => {
+        try {
+          const resp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}`, {
+            method: 'POST',
+            headers: { 'authorization': `Bearer ${token}` }
+          });
+          const data = await resp.json();
+          if (resp.ok && data && Array.isArray(data.data) && data.data.length > 0) {
+            const { status, progress } = data.data[0] || {};
+            const s = Number(status);
+            showResult('transcribeResult', { id: taskId, status, progress, label: statusLabel(s) }, false);
+            setTaskMeta(taskId, status);
+            setStatusPill(status);
+            setSteps(status);
+            setProgress(progress, status);
+            if (s === 3) {
+              clearInterval(STATUS_TIMER); STATUS_TIMER = null;
+              stopTaskTimer();
+              await showSubtitleLinks(taskId, token);
+            } else if (s === 4 || s === 5) {
+              clearInterval(STATUS_TIMER); STATUS_TIMER = null;
+              stopTaskTimer();
+              $('resultSub').textContent = '任務未完成';
+              toast('任務失敗或已取消', 'error');
+            }
+          } else {
+            showResult('transcribeResult', data || { error: '查詢任務狀態失敗' }, true);
+          }
+        } catch (e) {
+          showResult('transcribeResult', { error: e.message }, true);
+        }
+      }, 2000);
+    }
+
+    async function showSubtitleLinks(taskId, token) {
+      try {
+        const typesResp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle-types`, {
+          headers: { 'authorization': `Bearer ${token}` }
+        });
+        const typesData = await typesResp.json();
+        const types = (typesResp.ok && typesData && Array.isArray(typesData.data) && typesData.data.length > 0)
+          ? (typesData.data[0].types || [])
+          : ['TXT', 'SRT'];
+        const links = [];
+        for (const t of types) {
+          if (t === 'DIA') continue;
+          const resp = await fetch(`${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle-link?type=${encodeURIComponent(t)}`, {
+            headers: { 'authorization': `Bearer ${token}` }
+          });
+          const data = await resp.json();
+          if (resp.ok && data && Array.isArray(data.data) && data.data.length > 0) {
+            links.push({ type: t, url: data.data[0].url });
+          }
+        }
+        showResult('transcribeResult', { id: taskId, status: 3, progress: 100, types, links }, false);
+        setStatusPill(3);
+        setSteps(3);
+        setProgress(100, 3);
+        $('resultSub').textContent = '已產生 ' + links.length + ' 個檔案';
+        renderDownloadCards(links, taskId);
+        toast('轉錄完成', 'success');
+      } catch (e) {
+        console.error('取得字幕連結失敗:', e);
+      }
+    }
+
+    const TYPE_DESC = {
+      TXT: '純文字逐字稿',
+      SRT: '帶時間戳的 SubRip 字幕檔',
+      DIA: '對話/說話者切分檔',
+    };
+
+    function renderDownloadCards(links, taskId) {
+      const grid = $('downloadGrid');
+      grid.innerHTML = '';
+      if (!Array.isArray(links) || links.length === 0) { grid.classList.add('hidden'); return; }
+      grid.classList.remove('hidden');
+      links.forEach(l => {
+        const t = String(l.type || '').toUpperCase();
+        const cls = t.toLowerCase();
+        const card = document.createElement('div');
+        card.className = `dl-card ${cls}`;
+        card.innerHTML = `
+          <div class="ico">${t}</div>
+          <div class="meta">
+            <div class="t">下載 ${t} 字幕</div>
+            <div class="s">${TYPE_DESC[t] || '字幕檔'}</div>
+          </div>
+          <div class="arrow">→</div>
+        `;
+        card.addEventListener('click', () => downloadSubtitle(taskId, t));
+        grid.appendChild(card);
+      });
+    }
+
+    async function downloadSubtitle(taskId, type) {
+      const token = getToken();
+      if (!token) { toast('需要授權', 'error'); return; }
+      const url = `${API_BASE}/v1/subtitle/tasks/${taskId}/subtitle?type=${encodeURIComponent(type)}`;
+      try {
+        const resp = await fetch(url, { headers: { 'authorization': `Bearer ${token}` } });
+        if (!resp.ok) {
+          const text = await resp.text();
+          toast(`下載失敗 (${resp.status})`, 'error');
+          console.warn('下載失敗:', text);
+          return;
+        }
+        const blob = await resp.blob();
+        let filename = `${taskId}.${String(type).toLowerCase()}`;
+        const cd = resp.headers.get('content-disposition');
+        if (cd) {
+          const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+          const fn = (m && (m[1] || m[2])) ? decodeURIComponent(m[1] || m[2]) : null;
+          if (fn) filename = fn;
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      } catch (e) {
+        toast('下載錯誤', 'error');
+        console.error(e);
+      }
+    }
+
+    /* Init — guard first, then init UI */
+    if (requireAuthOrRedirect()) {
+      setStatusPill(null);
+      setProgress(0, null);
+      setSteps(null);
+      setTaskMeta(null, null);
+      updateAuthStatus();
+      const logoutLink = $('logoutLink');
+      if (logoutLink) logoutLink.addEventListener('click', (e) => { e.preventDefault(); logoutAndGoHome(); });
+    }
+  </script>
+</body>
+</html>

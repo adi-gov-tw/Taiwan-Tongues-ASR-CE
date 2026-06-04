@@ -1,5 +1,43 @@
 import os
+import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
+
+# Windows: 把 pip 裝的 nvidia cuDNN/cuBLAS bin 目錄加入 DLL 搜尋路徑，
+# 讓 ctranslate2 (faster-whisper 後端) 能載入。必須在 import faster_whisper 之前。
+# 注意：nvidia.cudnn / nvidia.cublas 是 PEP 420 namespace package，
+#       沒有 __init__.py 因此 __file__ 是 None；要改用 __path__ 取目錄。
+if sys.platform == "win32":
+    import importlib
+
+    for _pkg_name in ("nvidia.cudnn", "nvidia.cublas"):
+        try:
+            _pkg = importlib.import_module(_pkg_name)
+            _pkg_file = getattr(_pkg, "__file__", None)
+            if _pkg_file:
+                _pkg_dir = os.path.dirname(_pkg_file)
+            else:
+                _paths = list(getattr(_pkg, "__path__", []) or [])
+                _pkg_dir = _paths[0] if _paths else None
+            if _pkg_dir:
+                _bin = os.path.join(_pkg_dir, "bin")
+                if os.path.isdir(_bin):
+                    os.add_dll_directory(_bin)
+        except ImportError:
+            pass
+
+# 載入 .env（必須在所有讀取環境變數的模組 import 前完成；
+# 如 auth_shared.JWT_SECRET 在 module load 時就會凍結）。
+# 不存在 .env 時靜默略過，仍由系統環境變數或 start_app.bat 提供。
+try:
+    from dotenv import load_dotenv
+
+    _ENV_PATH = Path(__file__).parent / ".env"
+    if _ENV_PATH.exists():
+        load_dotenv(_ENV_PATH, override=False)
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 import uvicorn
 
