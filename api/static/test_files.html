@@ -148,6 +148,65 @@
     .btn-sm { padding: 7px 11px; font-size: 13px; border-radius: 8px; }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
+    /* 來源切換分頁（上傳 / 錄音） */
+    .source-tabs {
+      display: inline-flex; gap: 4px; padding: 4px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 16px;
+    }
+    .source-tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 8px;
+      background: transparent; border: none; color: var(--text-2);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+    }
+    .source-tab:hover { color: var(--text); }
+    .source-tab.active {
+      background: white; color: var(--text);
+      box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+    }
+
+    /* 錄音器 */
+    .recorder {
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: 32px 20px; border-radius: var(--radius-lg);
+      border: 1.5px dashed var(--border-strong); background: var(--surface-2);
+    }
+    .rec-status {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-3);
+    }
+    .rec-status.recording { color: var(--danger); }
+    .rec-status.ready { color: var(--success); }
+    .rec-status.processing { color: var(--primary); }
+    .rec-timer {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 30px; font-weight: 600; color: var(--text); letter-spacing: 0.04em;
+    }
+    .rec-btn {
+      width: 76px; height: 76px; border-radius: 50%;
+      border: 3px solid var(--border-strong); background: white;
+      display: grid; place-items: center; cursor: pointer; padding: 0;
+      transition: transform .1s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .rec-btn:hover { box-shadow: 0 8px 20px rgba(239,68,68,0.18); }
+    .rec-btn:active { transform: scale(0.96); }
+    .rec-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+    .rec-dot {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--danger);
+      transition: width .18s ease, height .18s ease, border-radius .18s ease;
+    }
+    .rec-btn.recording { border-color: var(--danger); animation: rec-pulse 1.4s ease-in-out infinite; }
+    .rec-btn.recording .rec-dot { width: 24px; height: 24px; border-radius: 4px; }
+    @keyframes rec-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); }
+      50% { box-shadow: 0 0 0 14px rgba(239,68,68,0); }
+    }
+    .rec-helper { font-size: 12px; color: var(--text-3); text-align: center; max-width: 360px; }
+    .rec-preview { width: 100%; max-width: 380px; margin-top: 4px; }
+
     .seg-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin: 18px 0 4px; }
     .seg-line { height: 1px; background: var(--border); }
     .seg-or { font-size: 11px; color: var(--text-3); font-weight: 700; letter-spacing: 0.1em; }
@@ -319,9 +378,15 @@
               </span>
               選擇音檔
             </div>
-            <span class="card-sub">支援 WAV / MP3 / FLAC / M4A / AAC</span>
+            <span class="card-sub">支援 WAV / MP3 / FLAC / M4A / AAC，或直接線上錄音</span>
           </div>
 
+          <div class="source-tabs" role="tablist" aria-label="音檔來源">
+            <button class="source-tab active" data-mode="upload" type="button" role="tab" aria-selected="true">上傳檔案</button>
+            <button class="source-tab" data-mode="record" type="button" role="tab" aria-selected="false">線上錄音</button>
+          </div>
+
+          <div id="uploadPanel">
           <div id="dropzone" class="dropzone" tabindex="0">
             <div class="dz-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -341,6 +406,19 @@
               <div class="size" id="fileSize">—</div>
             </div>
             <button class="x" id="fileRemove" title="移除檔案">×</button>
+          </div>
+          </div><!-- /uploadPanel -->
+
+          <div id="recordPanel" class="hidden">
+            <div class="recorder">
+              <div class="rec-status" id="recStatus">準備錄音</div>
+              <div class="rec-timer" id="recTimer">00:00</div>
+              <button class="rec-btn" id="recBtn" type="button" aria-label="開始 / 停止錄音">
+                <span class="rec-dot"></span>
+              </button>
+              <div class="rec-helper" id="recHelper">點擊按鈕開始錄音，再次點擊結束。瀏覽器會詢問麥克風權限。</div>
+              <audio id="recPreview" class="rec-preview hidden" controls preload="metadata"></audio>
+            </div>
           </div>
 
           <div style="margin-top: 18px;" class="form-row">
@@ -435,7 +513,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    const API_BASE = 'http://localhost:5000/api';
+    const API_BASE = '/api';
     const TOKEN_KEY = 'asr_token';
     let STATUS_TIMER = null;
     let CURRENT_TASK_ID = null;
@@ -603,9 +681,218 @@
     });
     fileInput.addEventListener('change', () => setSelectedFile(fileInput.files[0]));
     $('fileRemove').addEventListener('click', (e) => { e.stopPropagation(); fileInput.value = ''; setSelectedFile(null); });
+
+    /* ============ 線上錄音模式 ============ */
+    let currentSourceMode = 'upload';
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordTimerInterval = null;
+    let recordStartAt = 0;
+    let recordedFile = null;
+    let recordingState = 'idle'; // 'idle' | 'recording' | 'processing' | 'ready'
+
+    const recBtn = $('recBtn');
+    const recStatus = $('recStatus');
+    const recTimer = $('recTimer');
+    const recHelper = $('recHelper');
+    const recPreview = $('recPreview');
+
+    function setSourceMode(mode) {
+      currentSourceMode = mode;
+      document.querySelectorAll('.source-tab').forEach(t => {
+        const isActive = t.dataset.mode === mode;
+        t.classList.toggle('active', isActive);
+        t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+      $('uploadPanel').classList.toggle('hidden', mode !== 'upload');
+      $('recordPanel').classList.toggle('hidden', mode !== 'record');
+    }
+    document.querySelectorAll('.source-tab').forEach(t =>
+      t.addEventListener('click', () => setSourceMode(t.dataset.mode))
+    );
+
+    function fmtTimer(ms) {
+      const total = Math.floor(ms / 1000);
+      const m = String(Math.floor(total / 60)).padStart(2, '0');
+      const s = String(total % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+    function updateRecordTimer() {
+      if (recordStartAt) recTimer.textContent = fmtTimer(Date.now() - recordStartAt);
+    }
+    function setRecState(state) {
+      recordingState = state;
+      recBtn.classList.toggle('recording', state === 'recording');
+      recStatus.classList.remove('recording', 'ready', 'processing');
+      if (state === 'idle') {
+        recStatus.textContent = '準備錄音';
+        recHelper.textContent = '點擊按鈕開始錄音，再次點擊結束。瀏覽器會詢問麥克風權限。';
+      } else if (state === 'recording') {
+        recStatus.classList.add('recording');
+        recStatus.textContent = '錄音中';
+        recHelper.textContent = '再次點擊按鈕停止。';
+      } else if (state === 'processing') {
+        recStatus.classList.add('processing');
+        recStatus.textContent = '處理中…';
+        recHelper.textContent = '正在將錄音轉為 WAV…';
+      } else if (state === 'ready') {
+        recStatus.classList.add('ready');
+        recStatus.textContent = '錄音完成';
+        recHelper.textContent = '可預覽試聽，按「開始轉錄」送出辨識，或重新錄一次。';
+      }
+    }
+
+    function resetRecorder() {
+      if (recordingState === 'recording') {
+        try { mediaRecorder && mediaRecorder.state !== 'inactive' && mediaRecorder.stop(); } catch (_) {}
+      }
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      if (recordTimerInterval) { clearInterval(recordTimerInterval); recordTimerInterval = null; }
+      recordedChunks = [];
+      recordedFile = null;
+      recordStartAt = 0;
+      recTimer.textContent = '00:00';
+      if (recPreview) {
+        recPreview.classList.add('hidden');
+        recPreview.removeAttribute('src');
+        recPreview.load && recPreview.load();
+      }
+      setRecState('idle');
+    }
+
+    async function startRecording() {
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        toast('瀏覽器不支援錄音 API', 'error'); return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+        });
+        mediaStream = stream;
+        recordedChunks = [];
+        // 挑一個瀏覽器支援的容器格式來收 chunks；最後一律解碼成 WAV 再送出
+        const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+        let mime = '';
+        for (const c of candidates) { if (window.MediaRecorder.isTypeSupported(c)) { mime = c; break; } }
+        mediaRecorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime })
+          : new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = onRecordingStopped;
+        mediaRecorder.onerror = (e) => {
+          console.error('MediaRecorder error:', e);
+          toast('錄音時發生錯誤', 'error');
+          resetRecorder();
+        };
+        mediaRecorder.start();
+        recordStartAt = Date.now();
+        recTimer.textContent = '00:00';
+        recordTimerInterval = setInterval(updateRecordTimer, 200);
+        if (recPreview) { recPreview.classList.add('hidden'); recPreview.removeAttribute('src'); }
+        recordedFile = null;
+        setRecState('recording');
+      } catch (e) {
+        toast('無法存取麥克風: ' + (e.message || e.name || e), 'error');
+      }
+    }
+
+    function stopRecording() {
+      try {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      } catch (_) {}
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      if (recordTimerInterval) { clearInterval(recordTimerInterval); recordTimerInterval = null; }
+      setRecState('processing');
+    }
+
+    async function onRecordingStopped() {
+      try {
+        const mime = (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm';
+        const blob = new Blob(recordedChunks, { type: mime });
+        recordedChunks = [];
+        if (blob.size === 0) throw new Error('錄音內容為空');
+        const wavBlob = await convertToWav(blob);
+        const name = `recording_${Date.now()}.wav`;
+        recordedFile = new File([wavBlob], name, { type: 'audio/wav' });
+        recPreview.src = URL.createObjectURL(wavBlob);
+        recPreview.classList.remove('hidden');
+        setRecState('ready');
+      } catch (e) {
+        console.error(e);
+        toast('轉檔為 WAV 失敗: ' + (e.message || e), 'error');
+        recordedFile = null;
+        setRecState('idle');
+      }
+    }
+
+    recBtn && recBtn.addEventListener('click', () => {
+      if (recordingState === 'recording') stopRecording();
+      else if (recordingState === 'processing') return;
+      else startRecording();
+    });
+
+    async function convertToWav(blob) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      let audioBuffer;
+      try {
+        audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      } finally {
+        try { await ctx.close(); } catch (_) {}
+      }
+      const numCh = audioBuffer.numberOfChannels;
+      const length = audioBuffer.length;
+      const sampleRate = audioBuffer.sampleRate;
+      // 混音降到單聲道
+      let mono;
+      if (numCh === 1) {
+        mono = audioBuffer.getChannelData(0);
+      } else {
+        mono = new Float32Array(length);
+        for (let ch = 0; ch < numCh; ch++) {
+          const data = audioBuffer.getChannelData(ch);
+          for (let i = 0; i < length; i++) mono[i] += data[i] / numCh;
+        }
+      }
+      return encodeWav(mono, sampleRate, 1);
+    }
+
+    function encodeWav(samples, sampleRate, numChannels) {
+      const bytesPerSample = 2;
+      const blockAlign = numChannels * bytesPerSample;
+      const byteRate = sampleRate * blockAlign;
+      const dataSize = samples.length * bytesPerSample;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+      const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);       // PCM fmt chunk size
+      view.setUint16(20, 1, true);        // format = PCM
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);       // bits per sample
+      writeStr(36, 'data');
+      view.setUint32(40, dataSize, true);
+      let off = 44;
+      for (let i = 0; i < samples.length; i++, off += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+      return new Blob([view], { type: 'audio/wav' });
+    }
+    /* ============ /錄音模組 ============ */
+
     $('btnReset').addEventListener('click', () => {
       fileInput.value = '';
       setSelectedFile(null);
+      resetRecorder();
       $('referenceText').value = '';
       $('transcribeResult').classList.add('hidden');
       $('downloadGrid').classList.add('hidden');
@@ -638,7 +925,14 @@
     async function transcribeFile() {
       const btn = $('submitBtn');
       const referenceText = $('referenceText').value;
-      if (!fileInput.files[0]) { toast('請先選擇音檔', 'error'); return; }
+      let fileToSubmit;
+      if (currentSourceMode === 'record') {
+        fileToSubmit = recordedFile;
+        if (!fileToSubmit) { toast('請先完成錄音', 'error'); return; }
+      } else {
+        fileToSubmit = fileInput.files[0];
+        if (!fileToSubmit) { toast('請先選擇音檔', 'error'); return; }
+      }
       const token = getToken();
       if (!token) { toast('需要登入，將返回首頁', 'error'); setTimeout(() => window.location.replace('/'), 800); return; }
 
@@ -660,7 +954,7 @@
 
       const language = ($('languageSelect') || {}).value || 'zh';
       const formData = new FormData();
-      formData.append('audio', fileInput.files[0]);
+      formData.append('audio', fileToSubmit, fileToSubmit.name || 'audio.wav');
       if (referenceText) formData.append('reference_text', referenceText);
       formData.append('language', language);
 

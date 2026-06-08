@@ -17,13 +17,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Gitleaks CLI
+      # Install gitleaks by compiling through the Go module proxy
+      # (proxy.golang.org) instead of pulling a prebuilt tarball from
+      # the GitHub Releases CDN. Reasons:
+      #   - The Releases CDN has been intermittently 504ing on the
+      #     v8.28.0 linux_x64 asset for longer than a sane retry window.
+      #   - The official gitleaks-action requires a paid license for
+      #     organization repos, even public ones.
+      #   - proxy.golang.org is independent infrastructure (Google) and
+      #     is markedly more reliable for CI installs.
+      # Note: the Go module path is the legacy github.com/zricethezav/...
+      # path; the repo moved to gitleaks/gitleaks but go.mod keeps the
+      # original import for backwards compatibility.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install Gitleaks CLI (via Go module proxy)
         run: |
           GITLEAKS_VERSION=8.28.0
-          curl -sSL -o gitleaks.tar.gz https://github.com/zricethezav/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
-          tar -xzf gitleaks.tar.gz
-          sudo mv gitleaks /usr/local/bin/
-          rm gitleaks.tar.gz
+          go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Run Gitleaks (full scan)
         run: |

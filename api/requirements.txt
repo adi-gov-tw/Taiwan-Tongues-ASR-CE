@@ -31,7 +31,7 @@ websockets>=13.0.0
 requests>=2.31.0
 
 # 其他工具
-python-dotenv==1.0.1
+python-dotenv>=1.2.2
 tqdm==4.66.5
 
 # Auth

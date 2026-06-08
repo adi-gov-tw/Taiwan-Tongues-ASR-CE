@@ -81,12 +81,6 @@ class PunctuationProcessor:
             if self._load_failed:
                 return False
             try:
-                if (
-                    os.environ.get("HF_TOKEN")
-                    and not os.environ.get("HUGGING_FACE_HUB_TOKEN")
-                ):
-                    os.environ["HUGGING_FACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
-
                 import torch
                 from transformers import (
                     AutoModelForTokenClassification,

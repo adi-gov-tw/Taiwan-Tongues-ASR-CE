@@ -230,8 +230,8 @@ cp api/.env.example api/.env
   - 請求體：
     ```json
     {
-      "username": "admin",
-      "password": "admin@0935",
+      "username": "<your-admin-username>",
+      "password": "<your-admin-password>",
       "rememberMe": 0
     }
     ```
@@ -275,13 +275,6 @@ cp api/.env.example api/.env
   - 標頭：`Authorization: Bearer <token>`
   - 查詢參數：`username`、`newPassword`
 
-### 預設管理員帳號
-
-- 使用者名稱：`admin`
-- 密碼：`admin@0935`
-- 角色：`admin`
-- 過期時間：`2099-12-31`
-
 ### 環境變數
 
 完整清單與說明請見 `api/.env.example`。常用：
@@ -299,9 +292,6 @@ cp api/.env.example api/.env
 - `FASTAPI_WARMUP`：1 = 啟用模型預熱（降低首次推論延遲）
 - `FASTAPI_ASR_MODEL_SIZE`：faster-whisper 模型大小或本地資料夾（預設 `models`）
 - `BUFFERING_CHUNK_LENGTH_SECONDS` / `BUFFERING_CHUNK_OFFSET_SECONDS`：串流緩衝參數
-
-**HuggingFace**
-- `HF_TOKEN`：HuggingFace Token（從 HF 下載資源時可選用，未設定亦可運作）
 
 **標點符號後處理**
 - `ASR_API_ENABLE_PUNCTUATION`：1 = 啟用（預設）；0 = 停用
@@ -395,7 +385,7 @@ curl http://127.0.0.1:5000/stream/health
 # 2) 登入取得 JWT
 curl -X POST http://127.0.0.1:5000/api/v1/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin@0935","rememberMe":0}'
+  -d '{"username":"<your-admin-username>","password":"<your-admin-password>","rememberMe":0}'
 
 # 3) 建立檔案辨識任務（將 <TOKEN> 換成上一步取得之 token）
 curl -H "Authorization: Bearer <TOKEN>" \
