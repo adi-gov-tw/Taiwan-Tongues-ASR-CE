@@ -17,26 +17,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Gitleaks CLI
-        run: |
-          GITLEAKS_VERSION=8.28.0
-          # -f: fail on HTTP errors (otherwise curl writes 5xx HTML into the
-          #     output file and the next tar step explodes with
-          #     "gzip: stdin: not in gzip format").
-          # --retry / --retry-all-errors: survive transient GitHub Releases
-          #     CDN hiccups (504/connection reset) without failing the job.
-          # New org path is gitleaks/gitleaks; the old zricethezav URL only
-          # works via 302 redirect and is slower to fail when broken.
-          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
-            -o gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          tar -xzf gitleaks.tar.gz
-          sudo mv gitleaks /usr/local/bin/
-          rm gitleaks.tar.gz
-
-      - name: Run Gitleaks (full scan)
-        run: |
-          gitleaks detect --source . --redact --exit-code=2 --report-format=sarif --report-path=results.sarif
+      # Use the official gitleaks action: it bundles its own install /
+      # cache / retry logic and is maintained by the gitleaks project,
+      # so we don't depend on a single GitHub Releases CDN call landing
+      # within ~15 seconds. Free for public repos; this repo is public.
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.28.0
 
       - name: Ensure SARIF exists
         if: always()
