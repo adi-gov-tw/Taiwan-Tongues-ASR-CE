@@ -17,15 +17,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Use the official gitleaks action: it bundles its own install /
-      # cache / retry logic and is maintained by the gitleaks project,
-      # so we don't depend on a single GitHub Releases CDN call landing
-      # within ~15 seconds. Free for public repos; this repo is public.
-      - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_VERSION: 8.28.0
+      # Install gitleaks by compiling through the Go module proxy
+      # (proxy.golang.org) instead of pulling a prebuilt tarball from
+      # the GitHub Releases CDN. Reasons:
+      #   - The Releases CDN has been intermittently 504ing on the
+      #     v8.28.0 linux_x64 asset for longer than a sane retry window.
+      #   - The official gitleaks-action requires a paid license for
+      #     organization repos, even public ones.
+      #   - proxy.golang.org is independent infrastructure (Google) and
+      #     is markedly more reliable for CI installs.
+      # Note: the Go module path is the legacy github.com/zricethezav/...
+      # path; the repo moved to gitleaks/gitleaks but go.mod keeps the
+      # original import for backwards compatibility.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install Gitleaks CLI (via Go module proxy)
+        run: |
+          GITLEAKS_VERSION=8.28.0
+          go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run Gitleaks (full scan)
+        run: |
+          gitleaks detect --source . --redact --exit-code=2 --report-format=sarif --report-path=results.sarif
 
       - name: Ensure SARIF exists
         if: always()
