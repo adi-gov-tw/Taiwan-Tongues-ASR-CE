@@ -20,7 +20,16 @@ jobs:
       - name: Install Gitleaks CLI
         run: |
           GITLEAKS_VERSION=8.28.0
-          curl -sSL -o gitleaks.tar.gz https://github.com/zricethezav/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          # -f: fail on HTTP errors (otherwise curl writes 5xx HTML into the
+          #     output file and the next tar step explodes with
+          #     "gzip: stdin: not in gzip format").
+          # --retry / --retry-all-errors: survive transient GitHub Releases
+          #     CDN hiccups (504/connection reset) without failing the job.
+          # New org path is gitleaks/gitleaks; the old zricethezav URL only
+          # works via 302 redirect and is slower to fail when broken.
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           tar -xzf gitleaks.tar.gz
           sudo mv gitleaks /usr/local/bin/
           rm gitleaks.tar.gz
