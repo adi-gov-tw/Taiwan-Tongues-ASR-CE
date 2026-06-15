@@ -1,3 +1,3 @@
 path	sentence
-audio_train_01_1.wav	text_01
-audio_train_01_2.wav	text_02
+audio_train_01_1.wav	你好，今天天氣很好。
+audio_train_01_2.wav	我喜歡學習語音辨識。

@@ -38,11 +38,16 @@ if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 cd /d "%~dp0"
 
+REM dataset_config_name 支援 `ds:lang` 指定每份資料集的語系（Whisper 語言代碼）：
+REM   範例：混訓中/英/印尼 → "train_ds_01:zh+train_ds_02:en+train_ds_id:id"
+REM 未帶 `:lang` 時會 fallback 到下方的 --language（向後相容舊腳本）。
+if "%DATASET_CONFIG_NAME%"=="" set DATASET_CONFIG_NAME=train_ds_01:zh+train_ds_02:en
+
 python train_asr.py ^
     --model_name_or_path=model_for_finetune ^
     --dataset_name=csv ^
     --corpus_data_dir=sample_corpus ^
-    --dataset_config_name=train_ds_01+train_ds_02 ^
+    --dataset_config_name=%DATASET_CONFIG_NAME% ^
     --language=zh ^
     --train_split_name=train+validated ^
     --eval_split_name=test ^

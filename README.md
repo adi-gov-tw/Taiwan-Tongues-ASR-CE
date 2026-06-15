@@ -22,20 +22,25 @@
 │   ├── static/                       # 測試頁（index/test_files/test_realtime.html）
 │   ├── audio_files/                  # 任務暫存目錄（執行後產生）
 │   └── stt_streaming/                # 即時串流模組（ASR / VAD / Buffering）
-├── sample_corpus/
-│   ├── train_ds_01/
+├── sample_corpus/                    # 含 zh / en / id 三語最小範例可直接驗證流程
+│   ├── train_ds_01/                  # 中文（zh）
 │   │   ├── train.tsv
 │   │   ├── test.tsv
 │   │   ├── validated.tsv
 │   │   └── clips/
-│   └── train_ds_02/
+│   ├── train_ds_02/                  # 英文（en）
+│   │   ├── train.tsv
+│   │   ├── test.tsv
+│   │   ├── validated.tsv
+│   │   └── clips/
+│   └── train_ds_id/                  # 印尼文（id）
 │       ├── train.tsv
 │       ├── test.tsv
 │       ├── validated.tsv
 │       └── clips/
 ├── models/                           # 推論用模型（需另行下載）
 ├── model_for_finetune/               # 微調基底模型（需另行下載）
-├── train_asr.py                      # 訓練腳本
+├── train_asr.py                      # 訓練腳本（支援多語混訓 `ds:lang` 寫法）
 ├── evaluate_asr.py                   # 訓練後批次測試工具（轉錄+CER 評估）
 ├── cer.py                            # CER 計算工具
 ├── train.sh / .bat                   # 執行訓練（自動啟用 train_env）
@@ -50,9 +55,11 @@
 ### 資料夾說明
 
 - **sample_corpus/**  
-  存放語音資料與標註檔案，每個子資料夾（如 `train_ds_01`、`train_ds_02`）代表一個資料集。每個資料集包含：
+  存放語音資料與標註檔案，每個子資料夾（如 `train_ds_01`、`train_ds_02`、`train_ds_id`）代表一個資料集。每個資料集包含：
   - `train.tsv`、`test.tsv`、`validated.tsv`：標註檔案，以Tab分隔，包含語音檔案路徑與對應轉寫文字。
   - `clips/`：存放實際語音檔案，支援多層子目錄。
+  
+  附帶的 `train_ds_01`（中文）、`train_ds_02`（英文）、`train_ds_id`（印尼文）為三語最小範例，可直接驗證訓練流程。
 
 - **models/**  
   推論用模型（CTranslate2 格式，含國語、台語、客語、英語、印尼語）。請至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載，解壓後放入專案根目錄的 `models/`。
@@ -182,9 +189,22 @@ git clone https://huggingface.co/adi-gov-tw/<repo-name> models
    主要參數說明：
    - `--model_name_or_path`：本地檢查點路徑（預設為 `model_for_finetune`）或 HuggingFace 模型 ID（如 `openai/whisper-large-v3`）。
    - `--corpus_data_dir`：語料資料夾（如 `sample_corpus`）。
-   - `--dataset_config_name`：資料集組合（如 `train_ds_01+train_ds_02`）。
-   - `--language`：語言代碼（如 `zh`、`en`、`nan`、`hak`）。
+   - `--dataset_config_name`：資料集組合，以 `+` 串接。支援兩種寫法：
+     - 單語：`train_ds_01+train_ds_02` — 所有資料集共用 `--language`（向後相容）。
+     - **多語混訓**：`train_ds_01:zh+train_ds_02:en+train_ds_id:id` — 每份資料集帶自己的 Whisper 語系代碼，`prepare_dataset` 會逐筆切換 prefix token，可同時混訓多語（例如中/英/印尼）。
+   - `--language`：預設語系代碼（如 `zh`、`en`、`id`、`nan`、`hak`）。當 `--dataset_config_name` 未帶 `:lang` 時作為 fallback。
    - 其他參數可參考 `train.sh` / `train.bat` 及 `train_asr.py`。
+
+   **多語混訓範例**（透過環境變數覆寫 `train.sh` / `train.bat` 內建預設）：
+   ```bash
+   # Linux / macOS / Git Bash
+   DATASET_CONFIG_NAME="train_ds_01:zh+train_ds_02:en+train_ds_id:id" bash train.sh
+   ```
+   ```cmd
+   :: Windows (cmd)
+   set DATASET_CONFIG_NAME=train_ds_01:zh+train_ds_02:en+train_ds_id:id
+   train.bat
+   ```
 
 5. **訓練結果**  
    訓練完成後，模型與相關設定會儲存在 `output/` 目錄。
