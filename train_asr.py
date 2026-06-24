@@ -409,6 +409,7 @@ def main():
         dataset_name,
         dataset_config_name,
         data_dir,
+        language,
         sep="\t",
         split="train",
         streaming=True,
@@ -418,6 +419,9 @@ def main():
         Utility function to load a dataset in streaming mode. For datasets with multiple splits,
         each split is loaded individually and then splits combined by taking alternating examples from
         each (interleaving).
+
+        `language` 會被寫入每筆資料的 `lang` 欄位，供 `prepare_dataset` 在 tokenize 時為
+        Whisper 設定對應的語系 prefix token（支援 zh/en/id 等 Whisper 已知語言代碼）。
         """
         print("split: ", split)
         datas = {
@@ -434,9 +438,10 @@ def main():
             interleaved_dataset = concatenate_datasets(list(dataset_splits.values()))
             interleaved_dataset = interleaved_dataset.map(
                 lambda param: {
-                    "audio": f"{data_dir}/{dataset_config_name}/clips/{param['path']}"
+                    "audio": f"{data_dir}/{dataset_config_name}/clips/{param['path']}",
+                    "lang": language,
                 }
-            )
+            ).select_columns([data_args.audio_column_name, "sentence", "lang"])
 
             return interleaved_dataset
         else:
@@ -446,38 +451,59 @@ def main():
             )
             dataset[split] = dataset[split].map(
                 lambda param: {
-                    "audio": f"{data_dir}/{dataset_config_name}/clips/{param['path']}"
+                    "audio": f"{data_dir}/{dataset_config_name}/clips/{param['path']}",
+                    "lang": language,
                 }
-            )
+            ).select_columns([data_args.audio_column_name, "sentence", "lang"])
             return dataset[split]
 
-    ds_cf_name_split = data_args.dataset_config_name.split("+")
+    # dataset_config_name 支援兩種寫法：
+    #   - 舊：`ds_a+ds_b`            → 所有資料集共用 --language（向後相容）
+    #   - 新：`ds_a:zh+ds_b:en+ds_c:id` → 每個資料集帶自己的語系，可混語訓練（如中/英/印尼）
+    def _parse_config(pair):
+        if ":" in pair:
+            name, lang = pair.split(":", 1)
+            return name.strip(), lang.strip()
+        return pair.strip(), data_args.language
+
+    ds_cf_name_split = [
+        _parse_config(p) for p in data_args.dataset_config_name.split("+")
+    ]
     auth_token_kwargs = (
         {"token": True} if model_args.use_auth_token else {}
     )
 
     if training_args.do_train:
-        for ds_cf_name in ds_cf_name_split:
-            print("ds_cf_name: ", ds_cf_name)
-            raw_datasets["train"] = load_maybe_streaming_dataset(
+        train_parts = {}
+        for ds_cf_name, lang in ds_cf_name_split:
+            print(f"train ds_cf_name: {ds_cf_name}, lang: {lang}")
+            train_parts[ds_cf_name] = load_maybe_streaming_dataset(
                 data_args.dataset_name,
                 ds_cf_name,
                 data_dir=data_args.corpus_data_dir,
+                language=lang,
                 split=data_args.train_split_name,
                 streaming=data_args.streaming,
                 **auth_token_kwargs,
-            ).select_columns(["audio", "sentence"])
+            )
+        # 修正：原本在迴圈內 `raw_datasets["train"] = ...` 會覆寫，等同只用最後一個資料集。
+        # 現在改成全部收齊後再 concatenate，才是真正的多資料集訓練。
+        raw_datasets["train"] = concatenate_datasets(list(train_parts.values()))
 
     if training_args.do_eval:
-        for ds_cf_name in ds_cf_name_split:
-            raw_datasets["eval"] = load_maybe_streaming_dataset(
+        eval_parts = {}
+        for ds_cf_name, lang in ds_cf_name_split:
+            print(f"eval ds_cf_name: {ds_cf_name}, lang: {lang}")
+            eval_parts[ds_cf_name] = load_maybe_streaming_dataset(
                 data_args.dataset_name,
                 ds_cf_name,
                 data_dir=data_args.corpus_data_dir,
+                language=lang,
                 split=data_args.eval_split_name,
                 streaming=data_args.streaming,
                 **auth_token_kwargs,
-            ).select_columns(["audio", "sentence"])
+            )
+        raw_datasets["eval"] = concatenate_datasets(list(eval_parts.values()))
 
     raw_datasets = raw_datasets.cast_column(
         data_args.audio_column_name,
@@ -660,6 +686,16 @@ def main():
             if do_lower_case
             else batch[text_column_name]
         )
+
+        # 為支援混語訓練：若該筆資料帶有 `lang`（由 dataset_config_name 的 `:lang` 指定），
+        # 就為 tokenizer 設成對應語系的 prefix token；否則沿用啟動時以 --language 設好的預設。
+        sample_lang = batch.get("lang") if isinstance(batch, dict) else None
+        if sample_lang:
+            tokenizer.set_prefix_tokens(
+                language=sample_lang,
+                task=data_args.task,
+                predict_timestamps=False,
+            )
 
         batch["labels"] = tokenizer(input_str).input_ids
 
