@@ -22,7 +22,7 @@
 │   ├── static/                       # 測試頁（index/test_files/test_realtime.html）
 │   ├── audio_files/                  # 任務暫存目錄（執行後產生）
 │   └── stt_streaming/                # 即時串流模組（ASR / VAD / Buffering）
-├── sample_corpus/                    # 含 zh / en / id 三語最小範例可直接驗證流程
+├── sample_corpus/                    # 含 zh / en 兩語最小範例可直接驗證流程
 │   ├── train_ds_01/                  # 中文（zh）
 │   │   ├── train.tsv
 │   │   ├── test.tsv
@@ -186,18 +186,18 @@ git clone https://huggingface.co/adi-gov-tw/<repo-name> models
    - `--corpus_data_dir`：語料資料夾（如 `sample_corpus`）。
    - `--dataset_config_name`：資料集組合，以 `+` 串接。支援兩種寫法：
      - 單語：`train_ds_01+train_ds_02` — 所有資料集共用 `--language`（向後相容）。
-     - **多語混訓**：`train_ds_01:zh+train_ds_02:en+train_ds_id:id` — 每份資料集帶自己的 Whisper 語系代碼，`prepare_dataset` 會逐筆切換 prefix token，可同時混訓多語（例如中/英）。
+     - **多語混訓**：`train_ds_01:zh+train_ds_02:en` — 每份資料集帶自己的 Whisper 語系代碼，`prepare_dataset` 會逐筆切換 prefix token，可同時混訓多語（例如中/英）。
    - `--language`：預設語系代碼（如 `zh`、`en`、`nan`、`hak`）。當 `--dataset_config_name` 未帶 `:lang` 時作為 fallback。
    - 其他參數可參考 `train.sh` / `train.bat` 及 `train_asr.py`。
 
    **多語混訓範例**（透過環境變數覆寫 `train.sh` / `train.bat` 內建預設）：
    ```bash
    # Linux / macOS / Git Bash
-   DATASET_CONFIG_NAME="train_ds_01:zh+train_ds_02:en+train_ds_id:id" bash train.sh
+   DATASET_CONFIG_NAME="train_ds_01:zh+train_ds_02:en" bash train.sh
    ```
    ```cmd
    :: Windows (cmd)
-   set DATASET_CONFIG_NAME=train_ds_01:zh+train_ds_02:en+train_ds_id:id
+   set DATASET_CONFIG_NAME=train_ds_01:zh+train_ds_02:en
    train.bat
    ```
 
