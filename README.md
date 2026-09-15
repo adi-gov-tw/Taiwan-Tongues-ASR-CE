@@ -1,6 +1,6 @@
 # Taiwan Tongues ASR CE專案
 
-本專案提供一套自動語音辨識（ASR, Automatic Speech Recognition）模型訓練流程，並附有已訓練好的國語、台語、客語、英語、印尼語模型。你可以根據自己的語音資料進行微調（fine-tune），或直接使用現有模型進行語音辨識。
+本專案提供一套自動語音辨識（ASR, Automatic Speech Recognition）模型訓練流程，並附有已訓練好的國語、台語、客語、英語模型。你可以根據自己的語音資料進行微調（fine-tune），或直接使用現有模型進行語音辨識。
 
 ## 目錄結構
 
@@ -33,11 +33,6 @@
 │   │   ├── test.tsv
 │   │   ├── validated.tsv
 │   │   └── clips/
-│   └── train_ds_id/                  # 印尼文（id）
-│       ├── train.tsv
-│       ├── test.tsv
-│       ├── validated.tsv
-│       └── clips/
 ├── models/                           # 推論用模型（需另行下載）
 ├── model_for_finetune/               # 微調基底模型（需另行下載）
 ├── train_asr.py                      # 訓練腳本（支援多語混訓 `ds:lang` 寫法）
@@ -59,10 +54,10 @@
   - `train.tsv`、`test.tsv`、`validated.tsv`：標註檔案，以Tab分隔，包含語音檔案路徑與對應轉寫文字。
   - `clips/`：存放實際語音檔案，支援多層子目錄。
   
-  附帶的 `train_ds_01`（中文）、`train_ds_02`（英文）、`train_ds_id`（印尼文）為三語最小範例，可直接驗證訓練流程。
+  附帶的 `train_ds_01`（中文）、`train_ds_02`（英文）為兩語最小範例，可直接驗證訓練流程。
 
 - **models/**  
-  推論用模型（CTranslate2 格式，含國語、台語、客語、英語、印尼語）。請至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載，解壓後放入專案根目錄的 `models/`。
+  推論用模型（CTranslate2 格式，含國語、台語、客語、英語）。請至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載，解壓後放入專案根目錄的 `models/`。
 
 - **model_for_finetune/**  
   HuggingFace 檢查點格式，供 `train_asr.py --model_name_or_path model_for_finetune` 載入微調。請至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載，解壓後放入專案根目錄的 `model_for_finetune/`。
@@ -81,10 +76,10 @@
 
 該組織內提供：
 
-- **預訓練模型**：涵蓋 **國語、英語、台語、客語、印尼語** 五個語種
+- **預訓練模型**：涵蓋 **國語、英語、台語、客語** 四個語種
   - 推論用模型（CTranslate2 格式）→ 放入專案根目錄 `models/`
   - 微調基底模型（HuggingFace 檢查點格式）→ 放入專案根目錄 `model_for_finetune/`
-- **開源語料**：涵蓋 **國語、英語、台語、客語、印尼語** 五個語種，可作為訓練、微調與評估之用。語料格式請對照下方「語料格式說明」放入 `sample_corpus/<dataset>/`。
+- **開源語料**：涵蓋 **國語、英語、台語、客語語** 五個語種，可作為訓練、微調與評估之用。語料格式請對照下方「語料格式說明」放入 `sample_corpus/<dataset>/`。
 
 下載方式擇一：
 
@@ -168,7 +163,7 @@ git clone https://huggingface.co/adi-gov-tw/<repo-name> models
    > 事後加裝 GPU：在 venv 內 `pip install torch --index-url https://download.pytorch.org/whl/cu124 --force-reinstall`，再 `pip install "nvidia-cublas-cu12" "nvidia-cudnn-cu12>=9,<10"`。
 
 2. **準備語料**  
-   依照上述格式放置語音資料與標註檔案；`sample_corpus/` 內已附最小範例可直接驗證流程。完整的中、英、台、客、印尼開源語料可至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載。
+   依照上述格式放置語音資料與標註檔案；`sample_corpus/` 內已附最小範例可直接驗證流程。完整的中、英、台、客開源語料可至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載。
 
 3. **下載微調基底模型**  
    至 [adi-gov-tw on Hugging Face](https://huggingface.co/adi-gov-tw) 下載 HuggingFace 檢查點，並放置於專案根目錄的 `model_for_finetune/`。
@@ -191,8 +186,8 @@ git clone https://huggingface.co/adi-gov-tw/<repo-name> models
    - `--corpus_data_dir`：語料資料夾（如 `sample_corpus`）。
    - `--dataset_config_name`：資料集組合，以 `+` 串接。支援兩種寫法：
      - 單語：`train_ds_01+train_ds_02` — 所有資料集共用 `--language`（向後相容）。
-     - **多語混訓**：`train_ds_01:zh+train_ds_02:en+train_ds_id:id` — 每份資料集帶自己的 Whisper 語系代碼，`prepare_dataset` 會逐筆切換 prefix token，可同時混訓多語（例如中/英/印尼）。
-   - `--language`：預設語系代碼（如 `zh`、`en`、`id`、`nan`、`hak`）。當 `--dataset_config_name` 未帶 `:lang` 時作為 fallback。
+     - **多語混訓**：`train_ds_01:zh+train_ds_02:en+train_ds_id:id` — 每份資料集帶自己的 Whisper 語系代碼，`prepare_dataset` 會逐筆切換 prefix token，可同時混訓多語（例如中/英）。
+   - `--language`：預設語系代碼（如 `zh`、`en`、`nan`、`hak`）。當 `--dataset_config_name` 未帶 `:lang` 時作為 fallback。
    - 其他參數可參考 `train.sh` / `train.bat` 及 `train_asr.py`。
 
    **多語混訓範例**（透過環境變數覆寫 `train.sh` / `train.bat` 內建預設）：
